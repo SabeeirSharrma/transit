@@ -1,0 +1,396 @@
+{
+  "scanner_version": "0.1.0",
+  "files": {
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/.transit-cache.json": {
+      "mtime": 1784360656,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime-js/package.json": {
+      "mtime": 1784352678,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/package.json": {
+      "mtime": 1784358007,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime-js/src/index.ts": {
+      "mtime": 1784360410,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-rust-runtime/Cargo.toml": {
+      "mtime": 1784350515,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/src/types.ts": {
+      "mtime": 1784352851,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java": {
+      "mtime": 1784352621,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "registerFunction",
+          "signature": "public void registerFunction(String name, TransitFunction fn)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "getPort",
+          "signature": "public int getPort()",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "start",
+          "signature": "public void start() throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "stop",
+          "signature": "public void stop()",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "main",
+          "signature": "public static void main(String[] args) throws Exception",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_server.py": {
+      "mtime": 1784358713,
+      "entries": [
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_server.py",
+          "function_name": "register_function",
+          "signature": "register_function",
+          "export_tier": 1
+        },
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_server.py",
+          "function_name": "start_server",
+          "signature": "start_server",
+          "export_tier": 1
+        },
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_server.py",
+          "function_name": "TransitServer.start",
+          "signature": "def start(self)",
+          "export_tier": 1
+        },
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_server.py",
+          "function_name": "TransitServer.stop",
+          "signature": "def stop(self)",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-rust-runtime/build.rs": {
+      "mtime": 1784350672,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/package.json": {
+      "mtime": 1784362867,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-js/tsconfig.json": {
+      "mtime": 1784350522,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/index.js": {
+      "mtime": 1784356906,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java": {
+      "mtime": 1784352639,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "processSpecialized",
+          "signature": "public String processSpecialized(String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "getVersion",
+          "signature": "public String getVersion(String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "main",
+          "signature": "public static void main(String[] args) throws Exception",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/src/index.ts": {
+      "mtime": 1784362943,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/src/index.ts",
+          "function_name": "generateTypeScript",
+          "signature": "generateTypeScript",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/src/index.ts",
+          "function_name": "generateJavaGlue",
+          "signature": "generateJavaGlue",
+          "export_tier": 1
+        },
+        {
+          "language": "javascript",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/src/index.ts",
+          "function_name": "generatePythonGlue",
+          "signature": "generatePythonGlue",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/Cargo.toml": {
+      "mtime": 1784351174,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-js/package.json": {
+      "mtime": 1784358400,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-python-runtime-js/package.json": {
+      "mtime": 1784358175,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/src/config.ts": {
+      "mtime": 1784356097,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_service.py": {
+      "mtime": 1784358023,
+      "entries": [
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_service.py",
+          "function_name": "process_data",
+          "signature": "process_data",
+          "export_tier": 1
+        },
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_service.py",
+          "function_name": "get_version",
+          "signature": "get_version",
+          "export_tier": 1
+        },
+        {
+          "language": "python",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/transit_service.py",
+          "function_name": "transform_text",
+          "signature": "transform_text",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/build.rs": {
+      "mtime": 1784350604,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/.transit-cache.json": {
+      "mtime": 1784357387,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-rust-runtime/src/lib.rs": {
+      "mtime": 1784351552,
+      "entries": [
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-rust-runtime/src/lib.rs",
+          "function_name": "version",
+          "signature": "pub fn version() -> String",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-rust-runtime/src/lib.rs",
+          "function_name": "register_function",
+          "signature": "pub fn register_function(name: String) -> Result<()>",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-codegen/tsconfig.json": {
+      "mtime": 1784362887,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-py-runtime/.transit-cache.json": {
+      "mtime": 1784360656,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java": {
+      "mtime": 1784352375,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "encodeCallRequest",
+          "signature": "public static byte[] encodeCallRequest(int requestId, String functionName, String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "encodeHealthPing",
+          "signature": "public static byte[] encodeHealthPing(int requestId)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "decodeHeader",
+          "signature": "public static MessageHeader decodeHeader(DataInputStream in) throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "readPayload",
+          "signature": "public static byte[] readPayload(DataInputStream in, int payloadLen) throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "decodeCallRequest",
+          "signature": "public static CallRequest decodeCallRequest(byte[] payload)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "MessageHeader",
+          "signature": "public record MessageHeader(byte version, byte type, int requestId, int payloadLen) {}",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "CallRequest",
+          "signature": "public record CallRequest(String functionName, String argsJson) {}",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs": {
+      "mtime": 1784357521,
+      "entries": [
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "\") || trimmed.contains",
+          "signature": "if trimmed.contains(\"pub fn \") || trimmed.contains(\"pub async fn \")",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "scan_directory",
+          "signature": "pub fn scan_directory(root: String) -> String",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "scan_file_path",
+          "signature": "pub fn scan_file_path(file_path: String) -> String",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "invalidate_cache",
+          "signature": "pub fn invalidate_cache(root: String, file_path: String)",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "clear_cache",
+          "signature": "pub fn clear_cache(root: String)",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/src/lib.rs",
+          "function_name": "version",
+          "signature": "pub fn version() -> String",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/index.d.ts": {
+      "mtime": 1784357190,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-java-runtime-js/tsconfig.json": {
+      "mtime": 1784352682,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/package.json": {
+      "mtime": 1784350508,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/src/parser.ts": {
+      "mtime": 1784350567,
+      "entries": [
+        {
+          "language": "javascript",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/src/parser.ts",
+          "function_name": "parseSchema",
+          "signature": "parseSchema",
+          "export_tier": 1
+        }
+      ]
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-python-runtime-js/tsconfig.json": {
+      "mtime": 1784358210,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-scanner/package.json": {
+      "mtime": 1784350609,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-js/src/index.ts": {
+      "mtime": 1784360644,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-python-runtime-js/src/index.ts": {
+      "mtime": 1784359056,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/tsconfig.json": {
+      "mtime": 1784350521,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/packages/transit-schema/src/index.ts": {
+      "mtime": 1784356122,
+      "entries": []
+    }
+  }
+}
