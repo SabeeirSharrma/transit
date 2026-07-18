@@ -127,7 +127,6 @@ The Java server uses TCP (not Unix sockets) because `UnixDomainSocketAddress` is
 
 ## Known Issues / TODOs
 
-- **Scanner cache:** No incremental re-parsing yet (full re-scan on every startup)
 - **Build mode:** Codegen and typed stubs not implemented
 - **CLI:** `transit dev` / `transit build` / `transit start` are skeleton commands
 - **Python:** Bridge not implemented

@@ -14,8 +14,10 @@ Transit is a polyglot interop system built around three core principles:
 │                                                               │
 │   const rs = transit.rust("./rust")                          │
 │   const jv = transit.java("./java")                          │
+│   const py = transit.python("./python")                       │
 │   await rs.processFile(job)                                   │
 │   await jv.processSpecialized(result)                         │
+│   await py.processData(transformed)                           │
 └─────────────┬────────────────────────────────┬───────────────┘
               │                                │
               ▼                                ▼

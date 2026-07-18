@@ -1,0 +1,47 @@
+{
+  "scanner_version": "0.1.0",
+  "files": {
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/.transit-cache.json": {
+      "mtime": 1784357216,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/build.rs": {
+      "mtime": 1784350703,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/Cargo.toml": {
+      "mtime": 1784350702,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/src/.transit-cache.json": {
+      "mtime": 1784357149,
+      "entries": []
+    },
+    "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/src/lib.rs": {
+      "mtime": 1784351769,
+      "entries": [
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/src/lib.rs",
+          "function_name": "process_general",
+          "signature": "pub fn process_general(job: FileJob) -> ProcessResult",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/src/lib.rs",
+          "function_name": "process_with_helper",
+          "signature": "pub fn process_with_helper(job: FileJob) -> ProcessResult",
+          "export_tier": 1
+        },
+        {
+          "language": "rust",
+          "source_file": "/run/media/sabeeir/Work/SabeeirSharrma/transit/examples/js-rust-java-demo/rust/src/lib.rs",
+          "function_name": "version",
+          "signature": "pub fn version() -> String",
+          "export_tier": 1
+        }
+      ]
+    }
+  }
+}

@@ -53,11 +53,47 @@ const jv = transit.java("./java/src/main/java")
 
 ### `transit.python(dir): FunctionProxy`
 
-Reserved for future Python support. Currently throws on function calls.
+Scans a Python source directory and returns a language handle.
+
+```python
+const py = transit.python("./python")
+```
+
+**Parameters:**
+- `dir` (string) — path to the directory containing Python source files
+
+**Returns:** A `FunctionProxy` — same interface as Rust/Java.
+
+**Behavior:**
+- Scans for top-level `def` functions and `class` methods (tree-sitter Python grammar)
+- Detects `# transit:file` and `# transit:function` markers (Tiers 2/3)
+- Filters out private methods (`_` prefix)
+- Class methods are qualified as `ClassName.method_name`
+- On first function call, spawns a resident Python process and connects via TCP
+- The Python process stays alive across calls (no cold starts)
+
+**Transport:** TCP binary protocol on `127.0.0.1` (ephemeral port), same protocol as Java.
 
 ### `transit.info(): void`
 
 Prints all discovered functions for every registered language handle.
+
+### `scanFileSync(filePath): ManifestEntry[]`
+
+Scan a single file and return its manifest entries. Useful for incremental updates in file watchers.
+
+```js
+import { scanFileSync } from "transit"
+const entries = scanFileSync("./src/lib.rs")
+```
+
+### `invalidateFileCache(root, filePath): void`
+
+Remove a specific file from the scan cache (e.g., when a file is deleted).
+
+### `clearScanCache(root): void`
+
+Clear the entire scan cache for a directory. Forces a full re-scan on next `scanDirectory` call.
 
 ```js
 transit.info()
@@ -66,6 +102,67 @@ transit.info()
 // java (./java): 2 functions
 //   - processSpecialized [tier 1] (public String processSpecialized(String argsJson))
 ```
+
+### `transit.config`
+
+The resolved configuration object (always complete with defaults). Read-only.
+
+```js
+console.log(transit.config.build.rust.command)  // "cargo build --release"
+console.log(transit.config.build.java.jvmArgs)  // ["-Xmx512m"]
+console.log(transit.config.links["js-rust"])     // { transport: "native" }
+console.log(transit.config.exports)              // [{ file: "lib.rs", function: "hello" }]
+```
+
+### `transit.configDir`
+
+The directory the config was loaded from (usually `process.cwd()`).
+
+### `transit.reloadConfig(dir?): void`
+
+Reload config from disk. Call this if `transit.config.json` changes during development.
+
+```js
+transit.reloadConfig()        // reload from same dir
+transit.reloadConfig("/app")  // reload from a different dir
+```
+
+---
+
+## Config Functions (from `@transit/schema`)
+
+These are also re-exported from the `transit` package for convenience.
+
+### `loadConfig(dir): Required<TransitConfig> | null`
+
+Load, validate, and normalize `transit.config.json` from a directory. Returns `null` if no config file exists.
+
+```js
+import { loadConfig } from "transit"
+const config = loadConfig("/my/project")
+```
+
+### `loadConfigWithDefaults(dir): Required<TransitConfig>`
+
+Same as `loadConfig()` but returns full defaults when no config file exists (never returns null).
+
+### `validateConfig(raw): TransitConfig`
+
+Validate a raw JSON object against the Transit schema. Throws `ConfigError` with a specific message on invalid input.
+
+```js
+import { validateConfig } from "transit"
+try {
+  const config = validateConfig({ build: { rust: { command: 123 } } })
+} catch (err) {
+  console.error(err.message)
+  // "transit.config.json → build.rust.command: expected a string, got number"
+}
+```
+
+### `mergeWithDefaults(config): Required<TransitConfig>`
+
+Fill in Transit defaults for missing fields. Does not overwrite explicitly set values.
 
 ---
 

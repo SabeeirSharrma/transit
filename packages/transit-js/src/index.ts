@@ -33,7 +33,10 @@ let scannerModule: any = null;
 
 // Eagerly load the scanner native addon on module init
 try {
-  scannerModule = await import("@transit/scanner");
+  const imported = await import("@transit/scanner");
+  // CJS-to-ESM interop: static analysis may only lift some exports as named.
+  // Fall back to the .default object (full CJS module.exports) if available.
+  scannerModule = imported.default ?? imported;
 } catch {
   // Scanner not compiled — functions will be discovered via bridge fallback
 }
@@ -58,6 +61,55 @@ function scanDirectorySync(dir: string): Manifest {
   } catch (err) {
     console.error(`[transit] Scanner error for ${dir}: ${(err as Error).message}`);
     return { entries: [], generatedAt: Date.now() };
+  }
+}
+
+/**
+ * Scan a single file and return manifest entries.
+ * Used by the file watcher for incremental updates.
+ */
+function scanFileSync(filePath: string): ManifestEntry[] {
+  if (!scannerModule) {
+    return [];
+  }
+  try {
+    const json = scannerModule.scanFilePath(resolve(filePath));
+    const raw = JSON.parse(json);
+    return raw.map((e: any) => ({
+      language: e.language,
+      sourceFile: e.source_file ?? e.sourceFile,
+      functionName: e.function_name ?? e.functionName,
+      signature: e.signature,
+      export_tier: e.export_tier ?? e.exportTier,
+      exportTier: e.export_tier ?? e.exportTier,
+    }));
+  } catch (err) {
+    console.error(`[transit] Scanner error for ${filePath}: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/**
+ * Invalidate cache for a specific file (e.g. on file delete).
+ */
+function invalidateFileCache(root: string, filePath: string): void {
+  if (!scannerModule) return;
+  try {
+    scannerModule.invalidateCache(resolve(root), resolve(filePath));
+  } catch (err) {
+    console.error(`[transit] Cache invalidation error: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Clear the entire cache for a directory.
+ */
+function clearScanCache(root: string): void {
+  if (!scannerModule) return;
+  try {
+    scannerModule.clearCache(resolve(root));
+  } catch (err) {
+    console.error(`[transit] Cache clear error: ${(err as Error).message}`);
   }
 }
 
@@ -442,6 +494,8 @@ class Transit {
 
 export const transit = new Transit();
 export default transit;
+
+export { scanFileSync, invalidateFileCache, clearScanCache };
 
 export type { Manifest, ManifestEntry, TransitConfig, BuildOverride, LinkOverride, ExportOverride } from "@transit/schema";
 export { loadConfig, loadConfigWithDefaults, validateConfig, mergeWithDefaults } from "@transit/schema";

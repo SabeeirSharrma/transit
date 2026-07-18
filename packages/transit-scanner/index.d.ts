@@ -14,5 +14,8 @@ export interface Manifest {
   generatedAt: number;
 }
 
-export declare function scanDirectory(root: string): Manifest;
-export declare function scanFileNapi(filePath: string): ManifestEntry;
+export declare function scanDirectory(root: string): string;
+export declare function scanFilePath(filePath: string): string;
+export declare function invalidateCache(root: string, filePath: string): void;
+export declare function clearCache(root: string): void;
+export declare function version(): string;

@@ -44,8 +44,14 @@ module.exports = {
   scanDirectory(root) {
     return loadNativeAddon().scanDirectory(root);
   },
-  scanFileNapi(filePath) {
-    throw new Error("scanFileNapi not available — use scanDirectory instead");
+  scanFilePath(filePath) {
+    return loadNativeAddon().scanFilePath(filePath);
+  },
+  invalidateCache(root, filePath) {
+    return loadNativeAddon().invalidateCache(root, filePath);
+  },
+  clearCache(root) {
+    return loadNativeAddon().clearCache(root);
   },
   version() {
     return loadNativeAddon().version();

@@ -1,0 +1,129 @@
+{
+  "scanner_version": "0.1.0",
+  "files": {
+    "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java": {
+      "mtime": 1784352621,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "registerFunction",
+          "signature": "public void registerFunction(String name, TransitFunction fn)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "getPort",
+          "signature": "public int getPort()",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "start",
+          "signature": "public void start() throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "stop",
+          "signature": "public void stop()",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java",
+          "function_name": "main",
+          "signature": "public static void main(String[] args) throws Exception",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./packages/transit-java-runtime/.transit-cache.json": {
+      "mtime": 1784357372,
+      "entries": []
+    },
+    "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java": {
+      "mtime": 1784352375,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "encodeCallRequest",
+          "signature": "public static byte[] encodeCallRequest(int requestId, String functionName, String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "encodeHealthPing",
+          "signature": "public static byte[] encodeHealthPing(int requestId)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "decodeHeader",
+          "signature": "public static MessageHeader decodeHeader(DataInputStream in) throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "readPayload",
+          "signature": "public static byte[] readPayload(DataInputStream in, int payloadLen) throws IOException",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "decodeCallRequest",
+          "signature": "public static CallRequest decodeCallRequest(byte[] payload)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "MessageHeader",
+          "signature": "public record MessageHeader(byte version, byte type, int requestId, int payloadLen) {}",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java",
+          "function_name": "CallRequest",
+          "signature": "public record CallRequest(String functionName, String argsJson) {}",
+          "export_tier": 1
+        }
+      ]
+    },
+    "./packages/transit-java-runtime/src/main/java/transit/java/TransitService.java": {
+      "mtime": 1784352639,
+      "entries": [
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "processSpecialized",
+          "signature": "public String processSpecialized(String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "getVersion",
+          "signature": "public String getVersion(String argsJson)",
+          "export_tier": 1
+        },
+        {
+          "language": "java",
+          "source_file": "./packages/transit-java-runtime/src/main/java/transit/java/TransitService.java",
+          "function_name": "main",
+          "signature": "public static void main(String[] args) throws Exception",
+          "export_tier": 1
+        }
+      ]
+    }
+  }
+}
