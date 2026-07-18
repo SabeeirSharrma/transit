@@ -31,6 +31,7 @@ interface ScanResult {
   changed: string[];
   added: string[];
   removed: string[];
+  signatureChanges: { name: string; old: string; new: string }[];
 }
 
 // ─── Scanner wrapper ────────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ const SKIP_DIRS = new Set([
 
 class DirWatcher {
   private watchers = new Map<string, FSWatcher>();
-  private previousFunctions = new Map<string, string[]>();
+  private previousFunctions = new Map<string, Map<string, string>>();
   private verbose: boolean;
   private onChange: (dir: string, result: ScanResult) => void;
 
@@ -266,7 +267,11 @@ class DirWatcher {
 
     // Initial scan
     const initialFunctions = scanDirectory(absDir);
-    this.previousFunctions.set(absDir, initialFunctions.map((f) => f.name));
+    const sigMap = new Map<string, string>();
+    for (const fn of initialFunctions) {
+      sigMap.set(fn.name, fn.signature);
+    }
+    this.previousFunctions.set(absDir, sigMap);
 
     if (this.verbose) {
       console.log(`[transit] ${lang} (${relDir}): ${initialFunctions.length} functions`);
@@ -297,13 +302,29 @@ class DirWatcher {
   private handleChange(absDir: string, relDir: string, lang: string): void {
     const newFunctions = scanDirectory(absDir);
     const newNames = newFunctions.map((f) => f.name);
-    const oldNames = this.previousFunctions.get(absDir) ?? [];
+    const oldMap = this.previousFunctions.get(absDir) ?? new Map();
+    const oldNames = [...oldMap.keys()];
 
     const added = newNames.filter((n) => !oldNames.includes(n));
     const removed = oldNames.filter((n) => !newNames.includes(n));
-    const changed = added.length > 0 || removed.length > 0;
 
-    this.previousFunctions.set(absDir, newNames);
+    // Detect signature changes
+    const signatureChanges: { name: string; old: string; new: string }[] = [];
+    for (const fn of newFunctions) {
+      const oldSig = oldMap.get(fn.name);
+      if (oldSig && oldSig !== fn.signature && !added.includes(fn.name)) {
+        signatureChanges.push({ name: fn.name, old: oldSig, new: fn.signature });
+      }
+    }
+
+    const changed = added.length > 0 || removed.length > 0 || signatureChanges.length > 0;
+
+    // Update the map
+    const newMap = new Map<string, string>();
+    for (const fn of newFunctions) {
+      newMap.set(fn.name, fn.signature);
+    }
+    this.previousFunctions.set(absDir, newMap);
 
     if (changed || this.verbose) {
       this.onChange(lang, {
@@ -312,6 +333,7 @@ class DirWatcher {
         changed: changed ? [relDir] : [],
         added,
         removed,
+        signatureChanges,
       });
     }
   }
@@ -361,6 +383,11 @@ export async function dev(options: DevOptions = {}): Promise<void> {
     }
     if (result.removed.length > 0) {
       console.log(`[transit] ${lang}: -${result.removed.length} function(s): ${result.removed.join(", ")}`);
+    }
+    for (const sig of result.signatureChanges) {
+      console.warn(`[transit] ${lang}: signature changed for "${sig.name}"`);
+      console.warn(`  old: ${sig.old}`);
+      console.warn(`  new: ${sig.new}`);
     }
     if (verbose && result.changed.length === 0) {
       console.log(`[transit] ${lang}: ${result.functions.length} functions (no changes)`);

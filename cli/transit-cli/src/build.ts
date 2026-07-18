@@ -460,12 +460,24 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   console.log(`[transit] Wrote build manifest to dist/transit-manifest.json`);
 
   // 8. Check for compilation failures
-  const anyFailed = Object.values(result.compiled).some((r) => !r.success);
-  result.success = !anyFailed || codegenOnly;
+  const compiledLangs = Object.keys(result.compiled);
+  const failedLangs = Object.entries(result.compiled)
+    .filter(([, r]) => !r.success)
+    .map(([lang]) => lang);
+  const succeededLangs = compiledLangs.filter((l) => !failedLangs.includes(l));
 
-  if (anyFailed && !codegenOnly) {
-    console.error("[transit] Build failed due to compilation errors.");
-    process.exit(1);
+  result.success = failedLangs.length === 0 || codegenOnly;
+
+  if (failedLangs.length > 0 && !codegenOnly) {
+    if (succeededLangs.length > 0) {
+      // Partial success — warn but don't fail
+      console.warn(`[transit] Warning: ${failedLangs.join(", ")} compilation failed, but ${succeededLangs.join(", ")} succeeded.`);
+      console.warn("[transit] Build completed with warnings. Generated files are still available.");
+    } else {
+      // Total failure
+      console.error("[transit] Build failed: all compilations failed.");
+      process.exit(1);
+    }
   }
 
   console.log("[transit] Build complete.");

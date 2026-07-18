@@ -261,8 +261,18 @@ export function validateConfig(raw: Record<string, unknown>): TransitConfig {
     config.exports = raw.exports.map((v, i) => validateExportOverride(i, v));
   }
 
+  // Validate maxRestarts
+  if (raw.maxRestarts !== undefined) {
+    if (typeof raw.maxRestarts !== "number" || raw.maxRestarts < 0) {
+      throw new ConfigError(
+        `transit.config.json → maxRestarts: expected a non-negative number, got ${typeof raw.maxRestarts}`
+      );
+    }
+    config.maxRestarts = raw.maxRestarts;
+  }
+
   // Reject unknown top-level keys
-  const knownKeys = new Set(["build", "links", "exports"]);
+  const knownKeys = new Set(["build", "links", "exports", "maxRestarts"]);
   for (const key of Object.keys(raw)) {
     if (!knownKeys.has(key)) {
       throw new ConfigError(
@@ -318,6 +328,7 @@ export function mergeWithDefaults(config: TransitConfig): Required<TransitConfig
     build,
     links,
     exports: config.exports ?? [],
+    maxRestarts: config.maxRestarts ?? 3,
   };
 }
 

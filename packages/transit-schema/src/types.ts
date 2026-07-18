@@ -109,4 +109,6 @@ export interface TransitConfig {
   build?: Record<string, BuildOverride>;
   links?: Record<string, LinkOverride>;
   exports?: ExportOverride[];
+  /** Maximum restart attempts for resident processes (Java, Python). Default: 3 */
+  maxRestarts?: number;
 }

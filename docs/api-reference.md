@@ -110,8 +110,7 @@ The resolved configuration object (always complete with defaults). Read-only.
 ```js
 console.log(transit.config.build.rust.command)  // "cargo build --release"
 console.log(transit.config.build.java.jvmArgs)  // ["-Xmx512m"]
-console.log(transit.config.links["js-rust"])     // { transport: "native" }
-console.log(transit.config.exports)              // [{ file: "lib.rs", function: "hello" }]
+console.log(transit.config.maxRestarts)          // 3
 ```
 
 ### `transit.configDir`
@@ -210,6 +209,30 @@ Function "nonexistent" not found in rust. Available: process_general, version
 ---
 
 ## Types
+
+### `TransitError`
+
+Unified error type for all cross-language calls. Extends `Error`.
+
+```typescript
+class TransitError extends Error {
+  readonly language: string;    // "rust" | "java" | "python"
+  readonly functionName: string;
+  readonly cause: string;       // original error message
+  readonly raw: unknown;        // original error object
+}
+```
+
+**Example:**
+```js
+try {
+  await rs.processJob(data)
+} catch (err) {
+  if (err instanceof TransitError) {
+    console.error(`Error in ${err.language}: ${err.cause}`)
+  }
+}
+```
 
 ### `ManifestEntry`
 

@@ -27,6 +27,38 @@ interface RuntimeBridge {
   stop?(): Promise<void>;
 }
 
+// ─── TransitError ────────────────────────────────────────────────────────────
+
+/**
+ * Unified error type for all Transit cross-language calls.
+ * Wraps errors from Rust, Java, and Python bridges with context.
+ */
+export class TransitError extends Error {
+  /** Which language threw the error */
+  readonly language: string;
+  /** Which function was called */
+  readonly functionName: string;
+  /** The original error message */
+  readonly cause: string;
+  /** The original error object (if available) */
+  readonly raw: unknown;
+
+  constructor(opts: {
+    language: string;
+    functionName: string;
+    cause: string;
+    raw?: unknown;
+  }) {
+    const msg = `[${opts.language}] ${opts.functionName}: ${opts.cause}`;
+    super(msg);
+    this.name = "TransitError";
+    this.language = opts.language;
+    this.functionName = opts.functionName;
+    this.cause = opts.cause;
+    this.raw = opts.raw;
+  }
+}
+
 // ─── Scanner (preloaded at module init) ───────────────────────────────────────
 
 let scannerModule: any = null;
@@ -248,11 +280,22 @@ class RustDevBridge implements RuntimeBridge {
     const camelName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
     const fn = this.addon[camelName] ?? this.addon[functionName];
     if (!fn) {
-      throw new Error(
-        `Function "${functionName}" not found in Rust addon. Available: ${Object.keys(this.addon).join(", ")}`
-      );
+      throw new TransitError({
+        language: "rust",
+        functionName,
+        cause: `Function not found. Available: ${Object.keys(this.addon).join(", ")}`,
+      });
     }
-    return fn(...args);
+    try {
+      return await fn(...args);
+    } catch (err) {
+      throw new TransitError({
+        language: "rust",
+        functionName,
+        cause: (err as Error).message ?? String(err),
+        raw: err,
+      });
+    }
   }
 
   private async loadAddon(): Promise<any> {
@@ -303,17 +346,28 @@ class JavaDevBridge implements RuntimeBridge {
   private processManager: any = null;
   private started = false;
   private buildOverride?: BuildOverride;
+  private maxRestarts: number;
 
-  constructor(dir: string, buildOverride?: BuildOverride) {
+  constructor(dir: string, buildOverride?: BuildOverride, maxRestarts: number = 3) {
     this.dir = resolve(dir);
     this.buildOverride = buildOverride;
+    this.maxRestarts = maxRestarts;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
     if (!this.started) {
       await this.start();
     }
-    return this.processManager.callFunction(functionName, JSON.stringify(args));
+    try {
+      return await this.processManager.callFunction(functionName, JSON.stringify(args));
+    } catch (err) {
+      throw new TransitError({
+        language: "java",
+        functionName,
+        cause: (err as Error).message ?? String(err),
+        raw: err,
+      });
+    }
   }
 
   async start(): Promise<void> {
@@ -328,6 +382,7 @@ class JavaDevBridge implements RuntimeBridge {
       classpath,
       mainClass,
       jvmArgs: this.buildOverride?.jvmArgs,
+      maxRestarts: this.maxRestarts,
     });
 
     await this.processManager.start();
@@ -379,9 +434,11 @@ class PythonDevBridge implements RuntimeBridge {
   private dir: string;
   private processManager: any = null;
   private started = false;
+  private maxRestarts: number;
 
-  constructor(dir: string) {
+  constructor(dir: string, maxRestarts: number = 3) {
     this.dir = resolve(dir);
+    this.maxRestarts = maxRestarts;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -390,7 +447,16 @@ class PythonDevBridge implements RuntimeBridge {
     }
     // Unwrap single-element args: proxy passes [obj] but Python expects {obj}
     const payload = args.length === 1 ? args[0] : args;
-    return this.processManager.callFunction(functionName, JSON.stringify(payload));
+    try {
+      return await this.processManager.callFunction(functionName, JSON.stringify(payload));
+    } catch (err) {
+      throw new TransitError({
+        language: "python",
+        functionName,
+        cause: (err as Error).message ?? String(err),
+        raw: err,
+      });
+    }
   }
 
   async start(): Promise<void> {
@@ -400,6 +466,7 @@ class PythonDevBridge implements RuntimeBridge {
 
     this.processManager = new PythonProcessManager({
       pythonDir: this.dir,
+      maxRestarts: this.maxRestarts,
     });
 
     await this.processManager.start();
@@ -474,7 +541,7 @@ class Transit {
     if (this.handles.has(key)) return this.handles.get(key)!;
 
     const buildOverride = this._config.build?.java;
-    const bridge = new JavaDevBridge(dir, buildOverride);
+    const bridge = new JavaDevBridge(dir, buildOverride, this._config.maxRestarts);
     // Scan Java source files for public methods
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
@@ -493,7 +560,7 @@ class Transit {
     const key = `python:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new PythonDevBridge(dir);
+    const bridge = new PythonDevBridge(dir, this._config.maxRestarts);
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);
