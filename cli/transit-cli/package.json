@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "transit": "workspace:*",
-    "@transit/schema": "workspace:*"
+    "@transit/schema": "workspace:*",
+    "@transit/scanner": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

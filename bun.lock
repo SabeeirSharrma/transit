@@ -12,6 +12,7 @@
         "transit": "dist/index.js",
       },
       "dependencies": {
+        "@transit/scanner": "workspace:*",
         "@transit/schema": "workspace:*",
         "transit": "workspace:*",
       },

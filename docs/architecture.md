@@ -112,6 +112,16 @@ The Node.js client for the Python TCP bridge.
 
 Shared type definitions for the Transit IDL, manifest, and configuration.
 
+### transit-cli (TypeScript)
+
+Command-line interface for Transit development workflow.
+
+**Commands:**
+- `transit init` — Scans source files for `transit.rust()`, `transit.java()`, `transit.python()` calls, detects languages, and writes `transit.config.json`
+- `transit dev` — Live development mode with file watching, automatic re-scanning, and function change logging
+- `transit build` — (planned) Codegen and compilation for all registered languages
+- `transit start` — (planned) Production mode with built artifacts
+
 ## Transport Strategies
 
 | Pair | Mechanism | Serialization | Latency |
@@ -186,10 +196,13 @@ See [binary-protocol.md](binary-protocol.md) for the wire format specification.
 
 ### Dev mode (current)
 
+- `transit dev` starts a live development server
 - Scanner runs on startup, builds a manifest
 - `FunctionProxy` resolves names dynamically via `Proxy`
+- File watcher re-scans directories on changes
 - Rust: loads the `.node` addon directly
 - Java: spawns a resident JVM process on first call
+- Python: spawns a resident Python process on first call
 - Optimized for iteration speed, not raw throughput
 
 ### Build mode (planned)

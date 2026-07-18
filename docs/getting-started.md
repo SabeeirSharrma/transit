@@ -204,7 +204,33 @@ When you call `transit.rust("./rust")`, Transit:
 5. Builds a manifest of all discovered functions
 6. Returns a `Proxy` that resolves function names against this manifest
 
-The scanner runs once at startup. In dev mode, a future `transit dev` command will watch for file changes and update the manifest incrementally.
+The scanner runs once at startup. In dev mode, use `transit dev` to watch for file changes and update the manifest incrementally.
+
+## 7. Using the CLI
+
+### `transit init`
+
+Scans your source files for `transit.rust()`, `transit.java()`, and `transit.python()` calls. Detects which languages are in use and writes `transit.config.json`.
+
+```bash
+transit init              # Detect languages and write config
+transit init --dry-run    # Preview what would be written
+```
+
+### `transit dev`
+
+Starts a live development server that watches for file changes and re-scans directories automatically.
+
+```bash
+transit dev               # Start watching for changes
+transit dev --verbose     # Show per-file scan results
+```
+
+The dev server:
+- Loads `transit.config.json` (or auto-discovers language directories)
+- Scans all registered directories on startup using the tree-sitter scanner
+- Watches for file changes and logs function additions/removals
+- Clean shutdown with Ctrl+C
 
 ## Next steps
 
