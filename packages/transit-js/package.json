@@ -19,7 +19,8 @@
   "dependencies": {
     "@transit/schema": "workspace:*",
     "@transit/scanner": "workspace:*",
-    "@transit/java-runtime": "workspace:*"
+    "@transit/java-runtime": "workspace:*",
+    "@transit/python-runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

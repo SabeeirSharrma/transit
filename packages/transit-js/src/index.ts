@@ -161,12 +161,25 @@ function createLanguageHandle(
       }
     }
 
+    // Also register under snake_case (for camelCase Java/Python names)
+    const snakeName = entry.functionName.replace(/([A-Z])/g, (_: string, c: string) => '_' + c.toLowerCase());
+    if (snakeName !== entry.functionName) {
+      if (!flatMap.has(snakeName)) {
+        flatMap.set(snakeName, entry);
+      } else {
+        flatMap.delete(snakeName);
+      }
+    }
+
     if (!fileMap.has(filename)) {
       fileMap.set(filename, new Map());
     }
     fileMap.get(filename)!.set(entry.functionName, entry);
     if (camelName !== entry.functionName) {
       fileMap.get(filename)!.set(camelName, entry);
+    }
+    if (snakeName !== entry.functionName) {
+      fileMap.get(filename)!.set(snakeName, entry);
     }
   }
 
@@ -360,6 +373,48 @@ class JavaDevBridge implements RuntimeBridge {
   }
 }
 
+// ─── Python bridge (resident process + binary protocol) ────────────────────────
+
+class PythonDevBridge implements RuntimeBridge {
+  private dir: string;
+  private processManager: any = null;
+  private started = false;
+
+  constructor(dir: string) {
+    this.dir = resolve(dir);
+  }
+
+  async call(functionName: string, args: unknown[]): Promise<unknown> {
+    if (!this.started) {
+      await this.start();
+    }
+    // Unwrap single-element args: proxy passes [obj] but Python expects {obj}
+    const payload = args.length === 1 ? args[0] : args;
+    return this.processManager.callFunction(functionName, JSON.stringify(payload));
+  }
+
+  async start(): Promise<void> {
+    if (this.started) return;
+
+    const { PythonProcessManager } = await import("@transit/python-runtime");
+
+    this.processManager = new PythonProcessManager({
+      pythonDir: this.dir,
+    });
+
+    await this.processManager.start();
+    this.started = true;
+  }
+
+  async stop(): Promise<void> {
+    if (this.processManager) {
+      await this.processManager.stop();
+      this.processManager = null;
+      this.started = false;
+    }
+  }
+}
+
 // ─── Main transit object ──────────────────────────────────────────────────────
 
 class Transit {
@@ -438,15 +493,17 @@ class Transit {
     const key = `python:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge: RuntimeBridge = {
-      async call(functionName: string) {
-        throw new Error(`Python bridge not yet implemented. Function "${functionName}"`);
-      },
-    };
-    const manifest: Manifest = { entries: [], generatedAt: Date.now() };
+    const bridge = new PythonDevBridge(dir);
+    const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);
     this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] Python: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
     return handle;
   }
 

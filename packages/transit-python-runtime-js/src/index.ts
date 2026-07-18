@@ -1,10 +1,10 @@
 /**
- * @transit/java-runtime — Node.js bridge for Transit Java resident-process
+ * @transit/python-runtime — Node.js bridge for Transit Python resident-process
  *
- * Manages the Java process lifecycle (start/stop/health-check) and
- * implements the binary protocol client for JS↔Java communication.
+ * Manages the Python process lifecycle (start/stop/health-check) and
+ * implements the binary protocol client for JS↔Python communication.
  *
- * Binary protocol (v0.1, little-endian):
+ * Binary protocol (v0.1, little-endian) — identical to the Java bridge:
  *   Header:  [version:1][type:1][request_id:4][payload_len:4]
  *   CALL_REQUEST payload:  [fn_name_len:2][fn_name:N][args_len:4][args_json:N]
  *   CALL_RESPONSE payload: [status:1][result_len:4][result_json:N]
@@ -14,9 +14,8 @@
 
 import { spawn, ChildProcess } from "node:child_process";
 import { createConnection, Socket } from "node:net";
-import { randomBytes } from "node:crypto";
 import { resolve, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 
 // ─── Protocol constants ───────────────────────────────────────────────────────
 
@@ -39,17 +38,15 @@ interface PendingCall {
   timer: ReturnType<typeof setTimeout>;
 }
 
-// ─── JavaProcessManager ───────────────────────────────────────────────────────
+// ─── PythonProcessManager ─────────────────────────────────────────────────────
 
-export interface JavaProcessOptions {
-  /** Directory containing Java source files */
-  javaDir: string;
-  /** Classpath for the compiled Java classes */
-  classpath?: string;
-  /** Main class to run (default: auto-detect) */
-  mainClass?: string;
-  /** JVM arguments */
-  jvmArgs?: string[];
+export interface PythonProcessOptions {
+  /** Directory containing Python source files */
+  pythonDir: string;
+  /** Path to the transit_server.py (auto-detected if not set) */
+  serverScript?: string;
+  /** Python interpreter command (default: python3) */
+  interpreter?: string;
   /** Health check interval in ms (default: 5000) */
   healthCheckInterval?: number;
   /** Connection timeout in ms (default: 10000) */
@@ -58,8 +55,8 @@ export interface JavaProcessOptions {
   maxRestarts?: number;
 }
 
-export class JavaProcessManager {
-  private options: Required<JavaProcessOptions>;
+export class PythonProcessManager {
+  private options: Required<PythonProcessOptions>;
   private process: ChildProcess | null = null;
   private socket: Socket | null = null;
   private port: number = -1;
@@ -69,13 +66,13 @@ export class JavaProcessManager {
   private restartCount = 0;
   private ready = false;
   private readyPromise: Promise<void> | null = null;
+  private stopping = false;
 
-  constructor(options: JavaProcessOptions) {
+  constructor(options: PythonProcessOptions) {
     this.options = {
-      javaDir: options.javaDir,
-      classpath: options.classpath ?? resolve(options.javaDir, "build"),
-      mainClass: options.mainClass ?? "transit.java.TransitService",
-      jvmArgs: options.jvmArgs ?? ["-Xmx512m"],
+      pythonDir: options.pythonDir,
+      serverScript: options.serverScript ?? "",
+      interpreter: options.interpreter ?? "python3",
       healthCheckInterval: options.healthCheckInterval ?? 5000,
       connectTimeout: options.connectTimeout ?? 10000,
       maxRestarts: options.maxRestarts ?? 3,
@@ -83,7 +80,7 @@ export class JavaProcessManager {
   }
 
   /**
-   * Start the Java process and connect to it.
+   * Start the Python process and connect to it.
    */
   async start(): Promise<void> {
     if (this.ready) return;
@@ -94,40 +91,43 @@ export class JavaProcessManager {
   }
 
   private async doStart(): Promise<void> {
-    const { classpath, mainClass, jvmArgs } = this.options;
+    this.stopping = false;
+    const { interpreter, pythonDir } = this.options;
 
-    // Find the main class file
-    const classFile = mainClass.replace(/\./g, "/") + ".class";
-    if (!existsSync(join(classpath, classFile))) {
+    // Find the server script
+    const scriptPath = this.findServerScript();
+    if (!scriptPath) {
       throw new Error(
-        `Java class not found: ${mainClass} (looked in ${classpath})\n` +
-        `Compile with: javac -d ${classpath} src/main/java/**/*.java`
+        `Python transit_server.py not found in ${pythonDir}\n` +
+        `Ensure transit_server.py is in the directory or set serverScript option`
       );
     }
 
-    // Spawn the Java process
-    const args = [...jvmArgs, "-cp", classpath, mainClass];
-    this.process = spawn("java", args, {
+    // Spawn the Python process
+    this.process = spawn(interpreter, [scriptPath], {
+      cwd: pythonDir,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
     });
 
     this.process.on("error", (err) => {
-      console.error(`[transit-java] Process error: ${err.message}`);
+      console.error(`[transit-python] Process error: ${err.message}`);
       this.ready = false;
       this.maybeRestart();
     });
 
     this.process.on("exit", (code, signal) => {
-      console.error(`[transit-java] Process exited (code=${code}, signal=${signal})`);
+      console.error(`[transit-python] Process exited (code=${code}, signal=${signal})`);
       this.ready = false;
-      this.maybeRestart();
+      if (!this.stopping) {
+        this.maybeRestart();
+      }
     });
 
     // Read stdout for PORT=<port> line
     this.port = await this.waitForPort(this.process);
 
-    // Connect to the Java server
+    // Connect to the Python server
     await this.connect();
 
     // Start health checks
@@ -135,16 +135,43 @@ export class JavaProcessManager {
 
     this.ready = true;
     this.restartCount = 0;
-    console.error(`[transit-java] Connected to Java process on port ${this.port}`);
+    console.error(`[transit-python] Connected to Python process on port ${this.port}`);
   }
 
   /**
-   * Wait for the Java process to print PORT=<port> on stdout.
+   * Find the transit_server.py script.
+   */
+  private findServerScript(): string | null {
+    // If explicitly set, use that
+    if (this.options.serverScript) {
+      const script = resolve(this.options.pythonDir, this.options.serverScript);
+      return existsSync(script) ? script : null;
+    }
+
+    // Auto-detect: look for service files that have function registrations
+    // Skip transit_server.py (that's the library module, not the entry point)
+    const candidates = [
+      "transit_service.py",
+      "service.py",
+      "main.py",
+      "app.py",
+    ];
+
+    for (const candidate of candidates) {
+      const path = join(this.options.pythonDir, candidate);
+      if (existsSync(path)) return path;
+    }
+
+    return null;
+  }
+
+  /**
+   * Wait for the Python process to print PORT=<port> on stdout.
    */
   private waitForPort(proc: ChildProcess): Promise<number> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error("Java process did not print PORT= within timeout"));
+        reject(new Error("Python process did not print PORT= within timeout"));
       }, this.options.connectTimeout);
 
       let buffer = "";
@@ -158,14 +185,14 @@ export class JavaProcessManager {
       });
 
       proc.stderr!.on("data", (chunk: Buffer) => {
-        // Forward Java stderr for debugging
-        process.stderr.write(`[transit-java] ${chunk}`);
+        // Forward Python stderr for debugging
+        process.stderr.write(`[transit-python] ${chunk}`);
       });
     });
   }
 
   /**
-   * Connect to the Java server via TCP.
+   * Connect to the Python server via TCP.
    */
   private connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -190,7 +217,7 @@ export class JavaProcessManager {
       try {
         await this.healthCheck();
       } catch {
-        console.error("[transit-java] Health check failed, restarting...");
+        console.error("[transit-python] Health check failed, restarting...");
         this.ready = false;
         this.maybeRestart();
       }
@@ -214,15 +241,15 @@ export class JavaProcessManager {
   }
 
   /**
-   * Restart the Java process if it crashed.
+   * Restart the Python process if it crashed.
    */
   private maybeRestart(): void {
     if (this.restartCount >= this.options.maxRestarts) {
-      console.error("[transit-java] Max restarts reached, giving up");
+      console.error("[transit-python] Max restarts reached, giving up");
       return;
     }
     this.restartCount++;
-    console.error(`[transit-java] Restarting (attempt ${this.restartCount})...`);
+    console.error(`[transit-python] Restarting (attempt ${this.restartCount})...`);
     this.ready = false;
     this.readyPromise = null;
     // Clean up old state
@@ -233,25 +260,25 @@ export class JavaProcessManager {
     // Restart after a delay
     setTimeout(() => {
       this.start().catch((err) => {
-        console.error(`[transit-java] Restart failed: ${err.message}`);
+        console.error(`[transit-python] Restart failed: ${err.message}`);
       });
     }, 1000 * this.restartCount);
   }
 
   /**
-   * Call a Java function.
-   * Converts snake_case names to camelCase (Java server registers camelCase names).
+   * Call a Python function.
+   * Converts snake_case names to camelCase (Python server registers camelCase names).
    */
   async callFunction(functionName: string, argsJson: string): Promise<string> {
     if (!this.ready || !this.socket) {
-      throw new Error("Java process not ready");
+      throw new Error("Python process not ready");
     }
 
-    // Convert snake_case → camelCase to match Java server's registered names
-    const javaName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+    // Convert snake_case → camelCase to match Python server's registered names
+    const pyName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
 
     // Encode CALL_REQUEST
-    const fnBytes = Buffer.from(javaName, "utf-8");
+    const fnBytes = Buffer.from(pyName, "utf-8");
     const argsBytes = Buffer.from(argsJson, "utf-8");
 
     const payloadSize = 2 + fnBytes.length + 4 + argsBytes.length;
@@ -281,7 +308,7 @@ export class JavaProcessManager {
 
     if (status === STATUS_ERROR) {
       const parsed = JSON.parse(result);
-      throw new Error(parsed.error || "Java function returned error");
+      throw new Error(parsed.error || "Python function returned error");
     }
 
     return result;
@@ -348,9 +375,10 @@ export class JavaProcessManager {
   }
 
   /**
-   * Stop the Java process and clean up.
+   * Stop the Python process and clean up.
    */
   async stop(): Promise<void> {
+    this.stopping = true;
     this.ready = false;
 
     if (this.healthTimer) {
@@ -361,7 +389,7 @@ export class JavaProcessManager {
     // Reject all pending calls
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("Java process shutting down"));
+      pending.reject(new Error("Python process shutting down"));
     }
     this.pending.clear();
 
@@ -383,7 +411,7 @@ export class JavaProcessManager {
   }
 
   /**
-   * Whether the Java process is ready to accept calls.
+   * Whether the Python process is ready to accept calls.
    */
   isReady(): boolean {
     return this.ready;
@@ -392,4 +420,4 @@ export class JavaProcessManager {
 
 // ─── Re-export ────────────────────────────────────────────────────────────────
 
-export { JavaProcessManager as default };
+export { PythonProcessManager as default };

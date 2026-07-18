@@ -7,6 +7,7 @@ A hands-on guide to using Transit for polyglot JS ↔ Rust ↔ Java interop.
 - Node.js >= 20
 - Rust toolchain (for scanner and Rust addons)
 - Java JDK 21+
+- Python 3.10+
 - bun (recommended) or npm
 
 ## 1. Install Transit
@@ -107,7 +108,33 @@ cd packages/transit-java-runtime
 javac -d build src/main/java/transit/java/*.java
 ```
 
-## 4. Wire it up in JS
+## 4. Create a Python service
+
+```python
+# python/transit_service.py
+import json
+from transit_server import TransitServer, register_function
+
+def process_data(args_json):
+    """Process data and return a result."""
+    args = json.loads(args_json)
+    return json.dumps({
+        "output": f"Python processed: {len(args.get('data', []))} items",
+        "processed": True
+    })
+
+def get_version(args_json):
+    """Return the service version."""
+    return json.dumps({"version": "1.0.0"})
+
+if __name__ == "__main__":
+    server = TransitServer()
+    register_function("processData", process_data)
+    register_function("getVersion", get_version)
+    server.start()
+```
+
+## 5. Wire it up in JS
 
 ```js
 // index.js
@@ -119,6 +146,7 @@ const __dirname = import.meta.dirname
 // Register codebases
 const rs = transit.rust(resolve(__dirname, "./rust"))
 const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
+const py = transit.python(resolve(__dirname, "./python"))
 
 // Call Rust
 const rustResult = await rs.processJob({
@@ -137,6 +165,14 @@ const javaResult = await jv.processJob({
 console.log("Java:", javaResult)
 // { output: "Java processed: 24 chars" }
 
+// Call Python
+const pythonResult = await py.processData({
+  id: "job-001",
+  data: [10, 20, 30],
+})
+console.log("Python:", pythonResult)
+// { output: "Python processed: 3 items", processed: true }
+
 // List all discovered functions
 transit.info()
 ```
@@ -147,7 +183,7 @@ Run it:
 node index.js
 ```
 
-## 5. File disambiguation
+## 6. File disambiguation
 
 If two files export functions with the same name, use the qualified form:
 

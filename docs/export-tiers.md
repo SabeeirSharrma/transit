@@ -11,7 +11,7 @@ The scanner automatically discovers functions that are public by their language'
 | **Rust** | Text scan for `pub fn` / `pub async fn` | `pub fn process_job(job: FileJob) -> Result` |
 | **Java** | Text scan for lines starting with `public` + `(` | `public String processJob(String argsJson)` |
 | **JavaScript** | Tree-sitter query for `export_statement` + `function_declaration` | `export function processJob(data) {}` |
-| **Python** | Tree-sitter query for `function_definition` (non-underscore prefix) | `def process_job(data):` |
+| **Python** | Tree-sitter query for `function_definition` (non-underscore prefix) and class methods | `def process_job(data):` or `class Service: def process(self):` |
 
 **No annotations, no markers, no source changes.** Just write normal code with normal visibility modifiers.
 
@@ -24,6 +24,19 @@ pub fn process_general(job: FileJob) -> ProcessResult { ... }
 // This is automatically discovered — it's a public method
 public String processSpecialized(String argsJson) { ... }
 ```
+
+```python
+# This is automatically discovered — it's a top-level def
+def process_job(data):
+    return transform(data)
+
+# Class methods are also discovered (qualified as ClassName.method_name)
+class DataProcessor:
+    def process(self, data):
+        return transform(data)
+```
+
+**Python class detection:** Methods inside classes are automatically discovered and qualified with the class name (e.g., `DataProcessor.process`). Private methods (starting with `_`) are filtered out.
 
 ## Tier 2 — File-Level Export
 

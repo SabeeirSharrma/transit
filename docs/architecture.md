@@ -70,6 +70,7 @@ The public API surface. Exports the `transit` singleton and the `FunctionProxy` 
 - `Transit` — factory that creates and caches language handles
 - `RustDevBridge` — loads the native addon, dispatches calls
 - `JavaDevBridge` — manages the JVM process, dispatches calls via TCP
+- `PythonDevBridge` — manages the Python process, dispatches calls via TCP
 - `createLanguageHandle()` — builds a `Proxy` that resolves names against the manifest
 
 ### transit-java-runtime (Java)
@@ -89,6 +90,24 @@ The Node.js client for the Java TCP bridge.
 - Binary protocol encoder/decoder
 - Pending call tracking with timeouts
 
+### transit-py-runtime (Python)
+
+A minimal TCP server (`transit_server.py`) for Python function hosting. No external dependencies — uses only stdlib (`socket`, `struct`, `json`).
+
+- Binds to `127.0.0.1` on an ephemeral port
+- Prints `PORT=<port>` to stdout on startup
+- Handles `CALL_REQUEST`, `HEALTH_PING` messages
+- Functions registered via `register_function(name, fn)`
+- Same binary protocol as Java
+
+### transit-python-runtime-js (TypeScript)
+
+The Node.js client for the Python TCP bridge.
+
+- `PythonProcessManager` — manages Python process lifecycle (same pattern as `JavaProcessManager`)
+- Binary protocol encoder/decoder (identical to Java client)
+- Pending call tracking with timeouts
+
 ### transit-schema (TypeScript)
 
 Shared type definitions for the Transit IDL, manifest, and configuration.
@@ -99,6 +118,7 @@ Shared type definitions for the Transit IDL, manifest, and configuration.
 |------|-----------|---------------|---------|
 | JS ↔ Rust | In-process native addon | N/A (direct memory) | ~ns |
 | JS ↔ Java | TCP socket, binary protocol | Custom binary (10-byte header + payload) | ~ms |
+| JS ↔ Python | TCP socket, binary protocol | Custom binary (10-byte header + payload) | ~ms |
 | Rust ↔ Java | Socket (planned) | Binary | ~ms |
 
 ### Why different transports?
@@ -147,6 +167,21 @@ See [binary-protocol.md](binary-protocol.md) for the wire format specification.
 10. Result string is returned to the caller
 ```
 
+### JS → Python (dev mode)
+
+```
+1. User calls: py.processData(data)
+2. Proxy intercepts, flatMap lookup succeeds
+3. PythonDevBridge.call() triggers doStart() if not started
+4. Python process is spawned, PORT=<port> is read from stdout
+5. TCP connection is established to 127.0.0.1:<port>
+6. Binary protocol: CALL_REQUEST message sent
+7. TransitServer dispatches to the registered function
+8. Function returns a JSON string
+9. CALL_RESPONSE message received by PythonProcessManager
+10. Result string is returned to the caller
+```
+
 ## Dev Mode vs Build Mode
 
 ### Dev mode (current)
@@ -177,6 +212,8 @@ Hidden files are included (`.gitignore`-style hidden files are read).
 **Rust errors:** N-API propagates Rust `Result::Err` as JavaScript exceptions. The error message from Rust is included in the exception.
 
 **Java errors:** If a Java function throws an exception, the server catches it and returns a `CALL_RESPONSE` with `STATUS_ERROR` and a JSON error message: `{"error": "..."}`.
+
+**Python errors:** If a Python function raises an exception, the server catches it and returns a `CALL_RESPONSE` with `STATUS_ERROR` and a JSON error message: `{"error": "..."}`.
 
 **Scanner errors:** If a file fails to parse, it's silently skipped. The scanner continues with the rest of the directory.
 
