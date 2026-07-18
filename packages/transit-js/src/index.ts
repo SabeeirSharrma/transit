@@ -1,0 +1,377 @@
+/**
+ * transit — The public API surface
+ *
+ * Usage:
+ *   import { transit } from "transit"
+ *   const rs = transit.rust("./rust")
+ *   const jv = transit.java("./java")
+ *   const result = await rs.processFile(buffer)
+ *
+ * In dev mode, the Proxy resolves function names against the scanner manifest
+ * and dispatches through the appropriate transport bridge.
+ */
+
+import { resolve, join } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import type { Manifest, ManifestEntry, TransitConfig } from "@transit/schema";
+
+// ─── Runtime bridge types ─────────────────────────────────────────────────────
+
+interface RuntimeBridge {
+  /** Call a function on this bridge. Args are already JSON-serialized if needed. */
+  call(functionName: string, args: unknown[]): Promise<unknown>;
+  /** Start the bridge (e.g. launch resident process). */
+  start?(): Promise<void>;
+  /** Stop the bridge gracefully. */
+  stop?(): Promise<void>;
+}
+
+// ─── Scanner (preloaded at module init) ───────────────────────────────────────
+
+let scannerModule: any = null;
+
+// Eagerly load the scanner native addon on module init
+try {
+  scannerModule = await import("@transit/scanner");
+} catch {
+  // Scanner not compiled — functions will be discovered via bridge fallback
+}
+
+function scanDirectorySync(dir: string): Manifest {
+  if (!scannerModule) {
+    return { entries: [], generatedAt: Date.now() };
+  }
+  try {
+    const json = scannerModule.scanDirectory(resolve(dir));
+    const raw = JSON.parse(json);
+    // Normalize snake_case (from Rust scanner) to camelCase
+    const entries: ManifestEntry[] = raw.entries.map((e: any) => ({
+      language: e.language,
+      sourceFile: e.source_file ?? e.sourceFile,
+      functionName: e.function_name ?? e.functionName,
+      signature: e.signature,
+      export_tier: e.export_tier ?? e.exportTier,
+      exportTier: e.export_tier ?? e.exportTier,
+    }));
+    return { entries, generatedAt: raw.generated_at ?? raw.generatedAt };
+  } catch (err) {
+    console.error(`[transit] Scanner error for ${dir}: ${(err as Error).message}`);
+    return { entries: [], generatedAt: Date.now() };
+  }
+}
+
+// ─── Manifest-aware Proxy ─────────────────────────────────────────────────────
+
+type FunctionProxy = {
+  [key: string]: (...args: unknown[]) => Promise<unknown>;
+} & {
+  _manifest: Manifest;
+  _bridge: RuntimeBridge;
+  _lang: string;
+  /** List all discovered functions */
+  _functions(): ManifestEntry[];
+};
+
+/**
+ * Create a Proxy-based language handle that resolves function names
+ * against the scanner manifest and dispatches through the bridge.
+ */
+function createLanguageHandle(
+  lang: string,
+  manifest: Manifest,
+  bridge: RuntimeBridge
+): FunctionProxy {
+  // Build lookup maps for fast resolution
+  const flatMap = new Map<string, ManifestEntry>();
+  const fileMap = new Map<string, Map<string, ManifestEntry>>();
+
+  for (const entry of manifest.entries) {
+    const filename = entry.sourceFile
+      .replace(/^.*\//, "")
+      .replace(/\.[^.]+$/, "");
+
+    // Register under original name (snake_case from Rust)
+    if (!flatMap.has(entry.functionName)) {
+      flatMap.set(entry.functionName, entry);
+    } else {
+      flatMap.delete(entry.functionName);
+    }
+
+    // Also register under camelCase (napi-rs convention)
+    // Only if camelCase differs from original (avoids self-delete for names without underscores)
+    const camelName = entry.functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+    if (camelName !== entry.functionName) {
+      if (!flatMap.has(camelName)) {
+        flatMap.set(camelName, entry);
+      } else {
+        flatMap.delete(camelName);
+      }
+    }
+
+    if (!fileMap.has(filename)) {
+      fileMap.set(filename, new Map());
+    }
+    fileMap.get(filename)!.set(entry.functionName, entry);
+    if (camelName !== entry.functionName) {
+      fileMap.get(filename)!.set(camelName, entry);
+    }
+  }
+
+  const handle: FunctionProxy = {
+    _manifest: manifest,
+    _bridge: bridge,
+    _lang: lang,
+    _functions() {
+      return manifest.entries;
+    },
+  } as FunctionProxy;
+
+  return new Proxy(handle, {
+    get(target, prop: string | symbol) {
+      if (typeof prop === "string" && prop.startsWith("_")) {
+        return Reflect.get(target, prop);
+      }
+      if (typeof prop !== "string") return undefined;
+
+      // String disambiguation: transit.rs["filename"]["function"]()
+      if (fileMap.has(prop)) {
+        const fileFunctions = fileMap.get(prop)!;
+        return new Proxy({} as FunctionProxy, {
+          get(_fileTarget, fnProp: string | symbol) {
+            if (typeof fnProp !== "string") return undefined;
+            if (!fileFunctions.has(fnProp)) {
+              throw new Error(
+                `Function "${fnProp}" not found in file "${prop}". Available: ${[...fileFunctions.keys()].join(", ")}`
+              );
+            }
+            return (...args: unknown[]) => target._bridge.call(fnProp, args);
+          },
+        });
+      }
+
+      // Flat namespace: transit.rs.functionName()
+      if (flatMap.has(prop)) {
+        return (...args: unknown[]) => target._bridge.call(prop, args);
+      }
+
+      // Not found — give helpful error
+      throw new Error(
+        `Function "${prop}" not found in ${target._lang}. Available: ${[...flatMap.keys()].join(", ")}`
+      );
+    },
+  });
+}
+
+// ─── Rust bridge (in-process native addon) ────────────────────────────────────
+
+class RustDevBridge implements RuntimeBridge {
+  private addonPath: string;
+  private addon: any = null;
+
+  constructor(dir: string) {
+    this.addonPath = resolve(dir);
+  }
+
+  async call(functionName: string, args: unknown[]): Promise<unknown> {
+    if (!this.addon) {
+      this.addon = await this.loadAddon();
+    }
+
+    const camelName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+    const fn = this.addon[camelName] ?? this.addon[functionName];
+    if (!fn) {
+      throw new Error(
+        `Function "${functionName}" not found in Rust addon. Available: ${Object.keys(this.addon).join(", ")}`
+      );
+    }
+    return fn(...args);
+  }
+
+  private async loadAddon(): Promise<any> {
+    const candidates = [
+      join(this.addonPath, "index.node"),
+      join(this.addonPath, "target/release"),
+      join(this.addonPath, "target/debug"),
+    ];
+
+    let addonPath: string | null = null;
+
+    for (const candidate of candidates) {
+      if (candidate.endsWith(".node")) {
+        if (existsSync(candidate) && statSync(candidate).isFile()) {
+          addonPath = candidate;
+          break;
+        }
+      } else {
+        try {
+          const files = readdirSync(candidate);
+          const soFile = files.find((f: string) => f.endsWith(".node") || f.endsWith(".so"));
+          if (soFile) {
+            addonPath = join(candidate, soFile);
+            break;
+          }
+        } catch {}
+      }
+    }
+
+    if (!addonPath) {
+      throw new Error(
+        `Rust addon not found. Run "cargo build --release" in ${this.addonPath} first.`
+      );
+    }
+
+    // Load native addon via createRequire (CJS interop for .node/.so files)
+    const { createRequire } = await import("node:module");
+    const { pathToFileURL } = await import("node:url");
+    const req = createRequire(pathToFileURL(import.meta.url).href);
+    return req(addonPath);
+  }
+}
+
+// ─── Java bridge (resident process + binary protocol) ─────────────────────────
+
+class JavaDevBridge implements RuntimeBridge {
+  private dir: string;
+  private processManager: any = null;
+  private started = false;
+
+  constructor(dir: string) {
+    this.dir = resolve(dir);
+  }
+
+  async call(functionName: string, args: unknown[]): Promise<unknown> {
+    if (!this.started) {
+      await this.start();
+    }
+    return this.processManager.callFunction(functionName, JSON.stringify(args));
+  }
+
+  async start(): Promise<void> {
+    if (this.started) return;
+
+    const { JavaProcessManager } = await import("@transit/java-runtime");
+    const classpath = this.findClasspath();
+    const mainClass = this.findMainClass(classpath);
+
+    this.processManager = new JavaProcessManager({
+      javaDir: this.dir,
+      classpath,
+      mainClass,
+    });
+
+    await this.processManager.start();
+    this.started = true;
+  }
+
+  async stop(): Promise<void> {
+    if (this.processManager) {
+      await this.processManager.stop();
+      this.processManager = null;
+      this.started = false;
+    }
+  }
+
+  private findClasspath(): string {
+    // Walk up from scan dir to find compiled classes (build/, out/, target/)
+    // Java source dirs are often like .../src/main/java — classes live at .../build/
+    let dir = this.dir;
+    const maxDepth = 5;
+    for (let i = 0; i < maxDepth; i++) {
+      for (const subdir of ["build", "out", "target"]) {
+        const candidate = join(dir, subdir);
+        if (existsSync(candidate) && existsSync(join(candidate, "transit", "java", "TransitService.class"))) {
+          return candidate;
+        }
+      }
+      const parent = resolve(dir, "..");
+      if (parent === dir) break;
+      dir = parent;
+    }
+    // Fallback: check direct children
+    for (const subdir of ["build", "out", "target"]) {
+      const candidate = join(this.dir, subdir);
+      if (existsSync(candidate)) return candidate;
+    }
+    return this.dir;
+  }
+
+  private findMainClass(classpath: string): string {
+    const serviceFile = join(classpath, "transit/java/TransitService.class");
+    if (existsSync(serviceFile)) return "transit.java.TransitService";
+    return "transit.java.TransitService";
+  }
+}
+
+// ─── Main transit object ──────────────────────────────────────────────────────
+
+class Transit {
+  private handles = new Map<string, FunctionProxy>();
+
+  rust(dir: string): FunctionProxy {
+    const key = `rust:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge = new RustDevBridge(dir);
+    const manifest = scanDirectorySync(dir);
+    const handle = createLanguageHandle("rust", manifest, bridge);
+    this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] Rust: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
+    return handle;
+  }
+
+  java(dir: string): FunctionProxy {
+    const key = `java:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge = new JavaDevBridge(dir);
+    // Scan Java source files for public methods
+    const manifest = scanDirectorySync(dir);
+    const handle = createLanguageHandle("java", manifest, bridge);
+    this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] Java: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
+    return handle;
+  }
+
+  python(dir: string): FunctionProxy {
+    const key = `python:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge: RuntimeBridge = {
+      async call(functionName: string) {
+        throw new Error(`Python bridge not yet implemented. Function "${functionName}"`);
+      },
+    };
+    const manifest: Manifest = { entries: [], generatedAt: Date.now() };
+    const handle = createLanguageHandle("python", manifest, bridge);
+    this.handles.set(key, handle);
+    return handle;
+  }
+
+  info(): void {
+    for (const [key, handle] of this.handles) {
+      const [lang, dir] = key.split(":");
+      const fns = handle._functions();
+      console.log(`${lang} (${dir}): ${fns.length} functions`);
+      for (const fn of fns) {
+        console.log(`  - ${fn.functionName} [tier ${fn.export_tier}] (${fn.signature})`);
+      }
+    }
+  }
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+export const transit = new Transit();
+export default transit;
+
+export type { Manifest, ManifestEntry, TransitConfig } from "@transit/schema";
