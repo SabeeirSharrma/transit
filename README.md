@@ -1,49 +1,47 @@
-# Starlight Starter Kit: Basics
+# Transit Docs
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Documentation site for [Transit](https://github.com/sabeeirsharrma/transit) — built with [Astro Starlight](https://starlight.astro.build/).
 
-```
-npm create astro@latest -- --template starlight
-```
+## Local Development
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
-
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+```bash
+npm install
+npm run dev
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+The site runs at `http://localhost:4321`.
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+## Build
 
-Static assets, like favicons, can be placed in the `public/` directory.
+```bash
+npm run build
+```
 
-## 🧞 Commands
+Output goes to `dist/`.
 
-All commands are run from the root of the project, from a terminal:
+## Structure
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+```
+src/
+  content/
+    docs/
+      index.mdx                    # Landing page
+      guides/
+        getting-started.mdx         # Setup walkthrough
+        contributing.mdx            # Monorepo dev guide
+      reference/
+        api-reference.mdx           # Transit JS API
+        architecture.mdx            # System design
+        binary-protocol.mdx         # Wire format spec
+        export-tiers.mdx            # Function discovery
+  styles/
+    custom.css                      # Gold/mustard theme overrides
+```
 
-## 👀 Want to learn more?
+## Theming
 
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+Colors are customized via CSS custom properties in `src/styles/custom.css`. Dark mode uses `html[data-theme="dark"]`.
+
+## Deployment
+
+Push to the `web` branch to trigger a GitHub Pages deploy via `.github/workflows/deploy.yml`.
