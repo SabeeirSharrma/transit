@@ -1,0 +1,52 @@
+/* Transit — mustard/gold theme */
+
+:root {
+  /* Accent — warm gold */
+  --sl-color-accent: #c8a22b;
+  --sl-color-accent-high: #e0be44;
+  --sl-color-accent-low: #a07d1a;
+  --sl-color-accent-text: #1a1400;
+
+  /* Brand overrides */
+  --sl-color-bg: #fffdf5;
+  --sl-color-bg-sidebar: #faf5e4;
+  --sl-color-bg-inline-code: #fdf5d6;
+  --sl-color-text: #2b2200;
+  --sl-color-text-muted: #706428;
+  --sl-color-hairline: #e8dfb8;
+}
+
+/* Dark mode overrides */
+html[data-theme="dark"] {
+  --sl-color-accent: #e0be44;
+  --sl-color-accent-high: #f0d46a;
+  --sl-color-accent-low: #c8a22b;
+  --sl-color-accent-text: #1a1400;
+
+  --sl-color-bg: #1a1708;
+  --sl-color-bg-sidebar: #141206;
+  --sl-color-bg-inline-code: #2b2500;
+  --sl-color-text: #f0e8c8;
+  --sl-color-text-muted: #a89848;
+  --sl-color-hairline: #3d3510;
+
+  /* Fix inverted palette — Starlight flips white/black in dark mode,
+     which breaks card titles (they use --sl-color-white). Override
+     so "white" stays light and "black" stays dark. */
+  --sl-color-white: #f0e8c8;
+  --sl-color-black: #1a1400;
+}
+
+/* Hero gradient tint */
+.starlight-hero .hero-title {
+  background: linear-gradient(135deg, var(--sl-color-accent-low), var(--sl-color-accent-high));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Sidebar active item highlight */
+.sidebar-item[aria-current="page"] {
+  background: var(--sl-color-accent-low);
+  color: var(--sl-color-accent-text);
+}
