@@ -141,3 +141,19 @@ The Java server uses TCP (not Unix sockets) because `UnixDomainSocketAddress` is
 - Rust: standard `rustfmt`
 - Java: standard Oracle style
 - Commit messages: imperative mood, concise (e.g., "fix scanner toggle bug", "add Java TCP bridge")
+
+## Pull Requests
+
+To start contributing, first, create an issue and then, within that issue click on 'Create new branch'.
+Once finished and ready to merge, create a new pull request related to the issue, PRs should be in this format:
+
+**Title:** issue tag and title
+**Description:** Changes made + how they work
+
+Once PRs are published, it may take 1-2 days for review and approval, once approved, branch will be merged and PR + issue closed
+
+You cannot re-open PRs, if something related to the original issue or the same problem/bug arises, you can either re-open the original issue OR create a new issue.
+
+Some issues may be overtaken/undertaken by repo maintainer(s) at any time, with notice (so please keep checking issue conversations)
+
+Issue branches will be deleted (unless they are extremely major changes)
