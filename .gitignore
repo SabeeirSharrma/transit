@@ -32,3 +32,6 @@ __pycache__/
 
 # Files used for planning
 plan.md
+
+# Cache
+**/.transit/-cache.json
