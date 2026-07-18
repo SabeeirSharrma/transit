@@ -19,3 +19,11 @@ export type {
 } from "./types.js";
 
 export { parseSchema, parseSchemaFile } from "./parser.js";
+
+export {
+  loadConfig,
+  loadConfigRaw,
+  loadConfigWithDefaults,
+  validateConfig,
+  mergeWithDefaults,
+} from "./config.js";

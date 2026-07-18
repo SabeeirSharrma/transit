@@ -11,9 +11,10 @@
  * and dispatches through the appropriate transport bridge.
  */
 
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import type { Manifest, ManifestEntry, TransitConfig } from "@transit/schema";
+import type { Manifest, ManifestEntry, TransitConfig, BuildOverride } from "@transit/schema";
+import { loadConfigWithDefaults } from "@transit/schema";
 
 // ─── Runtime bridge types ─────────────────────────────────────────────────────
 
@@ -167,9 +168,11 @@ function createLanguageHandle(
 class RustDevBridge implements RuntimeBridge {
   private addonPath: string;
   private addon: any = null;
+  private buildOverride?: BuildOverride;
 
-  constructor(dir: string) {
+  constructor(dir: string, buildOverride?: BuildOverride) {
     this.addonPath = resolve(dir);
+    this.buildOverride = buildOverride;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -234,9 +237,11 @@ class JavaDevBridge implements RuntimeBridge {
   private dir: string;
   private processManager: any = null;
   private started = false;
+  private buildOverride?: BuildOverride;
 
-  constructor(dir: string) {
+  constructor(dir: string, buildOverride?: BuildOverride) {
     this.dir = resolve(dir);
+    this.buildOverride = buildOverride;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -257,6 +262,7 @@ class JavaDevBridge implements RuntimeBridge {
       javaDir: this.dir,
       classpath,
       mainClass,
+      jvmArgs: this.buildOverride?.jvmArgs,
     });
 
     await this.processManager.start();
@@ -306,13 +312,45 @@ class JavaDevBridge implements RuntimeBridge {
 
 class Transit {
   private handles = new Map<string, FunctionProxy>();
+  private _config: Required<TransitConfig>;
+  private _configDir: string;
+
+  constructor(configDir?: string) {
+    this._configDir = configDir ?? process.cwd();
+    this._config = loadConfigWithDefaults(this._configDir);
+
+    if (Object.keys(this._config.build).length > 0 || this._config.exports.length > 0) {
+      console.error(`[transit] Config loaded from ${this._configDir}`);
+    }
+  }
+
+  /** The resolved config (always complete with defaults). */
+  get config(): Required<TransitConfig> {
+    return this._config;
+  }
+
+  /** The directory the config was loaded from. */
+  get configDir(): string {
+    return this._configDir;
+  }
+
+  /**
+   * Reload config from disk. Call this if transit.config.json changes.
+   */
+  reloadConfig(dir?: string): void {
+    if (dir) this._configDir = dir;
+    this._config = loadConfigWithDefaults(this._configDir);
+    console.error(`[transit] Config reloaded from ${this._configDir}`);
+  }
 
   rust(dir: string): FunctionProxy {
     const key = `rust:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new RustDevBridge(dir);
+    const buildOverride = this._config.build?.rust;
+    const bridge = new RustDevBridge(dir, buildOverride);
     const manifest = scanDirectorySync(dir);
+    this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("rust", manifest, bridge);
     this.handles.set(key, handle);
 
@@ -328,9 +366,11 @@ class Transit {
     const key = `java:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new JavaDevBridge(dir);
+    const buildOverride = this._config.build?.java;
+    const bridge = new JavaDevBridge(dir, buildOverride);
     // Scan Java source files for public methods
     const manifest = scanDirectorySync(dir);
+    this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("java", manifest, bridge);
     this.handles.set(key, handle);
 
@@ -352,6 +392,7 @@ class Transit {
       },
     };
     const manifest: Manifest = { entries: [], generatedAt: Date.now() };
+    this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);
     this.handles.set(key, handle);
     return handle;
@@ -367,6 +408,34 @@ class Transit {
       }
     }
   }
+
+  /**
+   * Merge config export overrides into a manifest.
+   * Config exports are additive — they don't replace scanner results.
+   */
+  private mergeConfigExports(manifest: Manifest, dir: string): void {
+    if (!this._config.exports || this._config.exports.length === 0) return;
+
+    for (const exp of this._config.exports) {
+      const fullPath = resolve(dir, exp.file);
+      // Check if this export already exists in the manifest (scanner found it)
+      const alreadyExists = manifest.entries.some(
+        (e) =>
+          e.functionName === exp.function &&
+          (e.sourceFile === fullPath || e.sourceFile.endsWith(exp.file))
+      );
+      if (!alreadyExists) {
+        manifest.entries.push({
+          language: "", // will be inferred by the bridge
+          sourceFile: fullPath,
+          functionName: exp.function,
+          signature: `// config export: ${exp.function}`,
+          export_tier: 1,
+          exportTier: 1,
+        });
+      }
+    }
+  }
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -374,4 +443,5 @@ class Transit {
 export const transit = new Transit();
 export default transit;
 
-export type { Manifest, ManifestEntry, TransitConfig } from "@transit/schema";
+export type { Manifest, ManifestEntry, TransitConfig, BuildOverride, LinkOverride, ExportOverride } from "@transit/schema";
+export { loadConfig, loadConfigWithDefaults, validateConfig, mergeWithDefaults } from "@transit/schema";

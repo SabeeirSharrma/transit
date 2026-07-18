@@ -35,7 +35,7 @@ async function main() {
     const result = await rs.processGeneral(job);
     console.log("Result from Rust:", result);
   } catch (err) {
-    console.error("Error calling Rust:", (err as Error).message);
+    console.error("Error calling Rust:", err instanceof Error ? err.message : String(err));
     console.log("\nMake sure to build the Rust addon first:");
     console.log("  cd rust && cargo build --release");
   }
