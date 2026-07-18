@@ -4,6 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://sabeeirsharrma.github.io',
+	base: '/transit',
 	integrations: [
 		starlight({
 			title: 'Transit',
