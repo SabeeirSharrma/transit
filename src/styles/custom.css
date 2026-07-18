@@ -50,3 +50,160 @@ html[data-theme="dark"] {
   background: var(--sl-color-accent-low);
   color: var(--sl-color-accent-text);
 }
+
+/* ============================================
+   Animations
+   ============================================ */
+
+/* --- Hero entrance --- */
+.starlight-hero {
+  animation: hero-fade-in 0.8s ease-out both;
+}
+
+@keyframes hero-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hero title shimmer */
+.starlight-hero .hero-title {
+  background-size: 200% 200%;
+  animation: hero-shimmer 4s ease-in-out infinite alternate;
+}
+
+@keyframes hero-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+/* --- Cards stagger in --- */
+.card-grid > * {
+  opacity: 0;
+  animation: card-pop 0.5s ease-out forwards;
+}
+
+.card-grid > *:nth-child(1) { animation-delay: 0.15s; }
+.card-grid > *:nth-child(2) { animation-delay: 0.25s; }
+.card-grid > *:nth-child(3) { animation-delay: 0.35s; }
+.card-grid > *:nth-child(4) { animation-delay: 0.45s; }
+
+@keyframes card-pop {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --- Card hover lift --- */
+.card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(200, 162, 43, 0.12);
+}
+
+html[data-theme="dark"] .card:hover {
+  box-shadow: 0 8px 24px rgba(200, 162, 43, 0.08);
+}
+
+/* --- Sidebar link hover --- */
+.sidebar-item a {
+  transition: color 0.15s ease, padding-left 0.2s ease;
+}
+
+.sidebar-item a:hover {
+  padding-left: 0.25rem;
+  color: var(--sl-color-accent-high);
+}
+
+/* --- Content fade-in --- */
+.sl-markdown-content {
+  animation: content-reveal 0.6s ease-out 0.1s both;
+}
+
+@keyframes content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Link underline animation --- */
+.sl-markdown-content a:not(.not-content a) {
+  background-image: linear-gradient(var(--sl-color-accent), var(--sl-color-accent));
+  background-size: 0% 2px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.3s ease;
+  text-decoration: none;
+}
+
+.sl-markdown-content a:not(.not-content a):hover {
+  background-size: 100% 2px;
+}
+
+/* --- Footer fade-in --- */
+.site-footer {
+  animation: footer-slide 0.5s ease-out 0.3s both;
+}
+
+@keyframes footer-slide {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Sidebar slide-in --- */
+.sidebar {
+  animation: sidebar-enter 0.4s ease-out both;
+}
+
+@keyframes sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* --- Button press --- */
+.sl-link-button {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sl-link-button:active {
+  transform: scale(0.97);
+}
+
+/* --- Respect reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
