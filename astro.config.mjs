@@ -11,6 +11,9 @@ export default defineConfig({
 			title: 'Transit',
 			tagline: 'Languages that just talk to each other. No API. No middleman.',
 			customCss: ['./src/styles/custom.css'],
+			components: {
+				Footer: './src/components/Footer.astro',
+			},
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/sabeeirsharrma/transit' },
 			],
