@@ -131,7 +131,6 @@ The Java server uses TCP (not Unix sockets) because `UnixDomainSocketAddress` is
 - **Build mode:** Codegen and typed stubs not implemented
 - **CLI:** `transit dev` / `transit build` / `transit start` are skeleton commands
 - **Python:** Bridge not implemented
-- **Config overrides:** `transit.config.json` parsing not wired up
 - **File watchers:** No file-change detection for live reload in dev mode
 - **Binary protocol:** Currently JSON-serialized arguments over the wire; a purpose-built binary encoding (FlatBuffers/Cap'n Proto) is planned
 
