@@ -30,12 +30,16 @@ interface BuildResult {
   javaOutput?: string;
   /** Generated Python file path */
   pythonOutput?: string;
+  /** Build manifest path */
+  manifestOutput?: string;
   /** Compilation results per language */
   compiled: Record<string, { success: boolean; error?: string }>;
   /** Total functions discovered */
   functionCount: number;
   /** Languages processed */
   languages: string[];
+  /** Whether all compilations succeeded */
+  success: boolean;
 }
 
 // ─── Scanner wrapper ────────────────────────────────────────────────────────
@@ -329,7 +333,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const langDirs = discoverLanguageDirs(projectDir, config);
   if (langDirs.length === 0) {
     console.log("[transit] No language directories found. Run `transit init` first.");
-    return { compiled: {}, functionCount: 0, languages: [] };
+    return { compiled: {}, functionCount: 0, languages: [], success: true };
   }
 
   console.log(`[transit] Found ${langDirs.length} language(s): ${langDirs.map((l) => l.lang).join(", ")}`);
@@ -359,6 +363,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
     compiled: {},
     functionCount: allEntries.length,
     languages: [...new Set(allEntries.map((e) => e.language))],
+    success: true,
   };
 
   // Import codegen dynamically
@@ -423,6 +428,44 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
         console.error(`[transit] ${lang}: compilation failed — ${compileResult.error}`);
       }
     }
+  }
+
+  // 7. Write build manifest to dist/
+  const distDir = join(projectDir, "dist");
+  if (!existsSync(distDir)) {
+    try {
+      mkdirSync(distDir, { recursive: true });
+    } catch {
+      // ignore
+    }
+  }
+
+  const buildManifest = {
+    generatedAt: manifest.generatedAt,
+    entryPoint: "transit.gen.ts",
+    functions: manifest.entries.map((e) => ({
+      language: e.language,
+      functionName: e.functionName,
+      signature: e.signature,
+      exportTier: e.exportTier,
+    })),
+    compilation: Object.fromEntries(
+      Object.entries(result.compiled).map(([lang, r]) => [lang, { success: r.success, error: r.error }])
+    ),
+  };
+
+  const manifestPath = join(distDir, "transit-manifest.json");
+  writeFileSync(manifestPath, JSON.stringify(buildManifest, null, 2), "utf-8");
+  result.manifestOutput = manifestPath;
+  console.log(`[transit] Wrote build manifest to dist/transit-manifest.json`);
+
+  // 8. Check for compilation failures
+  const anyFailed = Object.values(result.compiled).some((r) => !r.success);
+  result.success = !anyFailed || codegenOnly;
+
+  if (anyFailed && !codegenOnly) {
+    console.error("[transit] Build failed due to compilation errors.");
+    process.exit(1);
   }
 
   console.log("[transit] Build complete.");

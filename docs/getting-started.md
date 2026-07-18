@@ -232,6 +232,56 @@ The dev server:
 - Watches for file changes and logs function additions/removals
 - Clean shutdown with Ctrl+C
 
+### `transit build`
+
+Runs the build pipeline: scan → codegen → compile.
+
+```bash
+transit build                      # Generate stubs and compile
+transit build --codegen-only       # Generate stubs without compiling
+transit build --verbose            # Show detailed output
+```
+
+The build command:
+- Scans all registered directories
+- Generates `transit.gen.ts` with typed function interfaces
+- Generates Java/Python glue code if needed
+- Compiles Rust and Java
+- Writes `dist/transit-manifest.json` for production mode
+- Exits with code 1 on compilation failure
+
+### `transit start`
+
+Runs the production build with resident processes.
+
+```bash
+transit start                          # Run with default entry point (src/index.js)
+transit start --entry src/app.js       # Specify custom entry point
+transit start --verbose                # Show resident process logs
+```
+
+The start command:
+- Loads the build manifest from `dist/transit-manifest.json`
+- Starts resident processes (Java, Python) based on manifest
+- Runs your application entry point
+- Forwards SIGTERM/SIGINT for graceful shutdown
+- Exits with code 1 if manifest or entry point is missing
+
+## 8. Production workflow
+
+```bash
+# 1. Initialize your project
+transit init
+
+# 2. Write your code (Rust, Java, Python functions)
+
+# 3. Build everything
+transit build
+
+# 4. Run in production
+transit start --entry src/index.js
+```
+
 ## Next steps
 
 - [API Reference](api-reference.md) — full API documentation

@@ -17,6 +17,13 @@ const command = args[0];
 const flags = new Set(args.slice(1).filter((a) => a.startsWith("--")));
 const hasFlag = (name: string) => flags.has(`--${name}`);
 
+// Parse flag values (e.g., --entry src/app.js)
+function getFlagValue(name: string): string | undefined {
+  const idx = args.indexOf(`--${name}`);
+  if (idx === -1) return undefined;
+  return args[idx + 1];
+}
+
 const HELP = `
 transit — Languages that just talk to each other
 
@@ -34,6 +41,7 @@ Options:
   --verbose       Verbose output (per-file scan results)
   --dry-run       Init only: show what would be written without writing
   --codegen-only  Build only: skip compilation, generate stubs only
+  --entry         Start only: application entry point (default: src/index.js)
 
 Examples:
   transit init               # Detect languages and write transit.config.json
@@ -41,6 +49,8 @@ Examples:
   transit dev --verbose      # Show per-file scan results
   transit build              # Generate stubs and compile
   transit build --codegen-only  # Generate stubs without compiling
+  transit start              # Run production mode
+  transit start --entry src/app.js  # Specify entry point
 `;
 
 async function main() {
@@ -86,9 +96,12 @@ async function main() {
     }
 
     case "start": {
-      console.log("[transit] Starting production mode...");
-      // TODO: Phase 5 — Load built artifacts and start
-      console.log("[transit] Start not yet implemented.");
+      const { start } = await import("./start.js");
+      await start({
+        verbose: hasFlag("verbose"),
+        entry: getFlagValue("entry"),
+      });
+      // start() keeps the process alive — no break needed
       break;
     }
 
