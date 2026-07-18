@@ -1,6 +1,6 @@
 # Binary Protocol
 
-The wire format for communication between the Node.js bridge and the Java resident process.
+The wire format for communication between the Node.js bridge and Java/Python resident processes.
 
 ## Overview
 
@@ -8,6 +8,7 @@ The wire format for communication between the Node.js bridge and the Java reside
 - **Byte order:** Little-endian
 - **Protocol version:** 1
 - **Message model:** Request-response (each request gets exactly one response)
+- **Shared by:** Java and Python bridges (identical protocol)
 
 ## Header Format
 
@@ -25,10 +26,10 @@ Offset  Size  Field
 
 | Byte | Name | Direction | Payload |
 |------|------|-----------|---------|
-| `0x01` | CALL_REQUEST | JS → Java | Function call |
-| `0x02` | CALL_RESPONSE | Java → JS | Function result |
-| `0x03` | HEALTH_PING | JS → Java | Empty |
-| `0x04` | HEALTH_PONG | Java → JS | Empty |
+| `0x01` | CALL_REQUEST | JS → Java/Python | Function call |
+| `0x02` | CALL_RESPONSE | Java/Python → JS | Function result |
+| `0x03` | HEALTH_PING | JS → Java/Python | Empty |
+| `0x04` | HEALTH_PONG | Java/Python → JS | Empty |
 
 ## Payload Formats
 
@@ -151,3 +152,11 @@ version=1
 - One thread per client connection (via `ExecutorService`)
 - Functions registered in a `ConcurrentHashMap`
 - Shutdown hook calls `server.stop()` on JVM exit
+
+### Python side (transit_server.py)
+
+- Uses stdlib `socket`, `struct`, `json`, `threading`
+- Binary decoding via `struct.unpack` with little-endian format
+- One thread per client connection (via `concurrent.futures.ThreadPoolExecutor`)
+- Functions registered in a plain `dict`
+- Same protocol as Java — identical message format and flow

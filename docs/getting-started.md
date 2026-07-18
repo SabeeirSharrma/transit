@@ -1,57 +1,55 @@
 # Getting Started
 
-A hands-on guide to using Transit for polyglot JS ↔ Rust ↔ Java interop.
+This guide walks you through setting up Transit from scratch. By the end, you'll be calling functions across JS, Rust, Java, and Python.
 
 ## Prerequisites
 
-- Node.js >= 20
-- Rust toolchain (for scanner and Rust addons)
-- Java JDK 21+
-- Python 3.10+
-- bun (recommended) or npm
+Before you begin, make sure you have:
 
-## 1. Install Transit
+| Tool | Why you need it | How to check |
+|------|-----------------|--------------|
+| **Node.js** >= 20 | Runs your JS code | `node --version` |
+| **bun** | Package manager (npm also works) | `bun --version` |
+| **Rust** | For the scanner and Rust functions | `rustc --version` |
+| **Java** JDK 21+ | For Java functions | `java --version` |
+| **Python** 3.10+ | For Python functions | `python3 --version` |
+
+If you only want to use Rust (no Java or Python), you only need Node.js, bun, and Rust.
+
+## 1. Create a new project
 
 ```bash
+mkdir my-transit-app
+cd my-transit-app
+bun init -y
 bun install transit
 ```
 
-## 2. Create a Rust module
+## 2. Set up your first language
+
+Let's start with Rust since it has the best performance.
+
+### Create the Rust module
+
+Create a file at `rust/src/lib.rs`:
 
 ```rust
 // rust/src/lib.rs
-// transit:file — exports all public functions
 
 use napi_derive::napi;
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
-#[napi(object)]
-pub struct Job {
-    pub id: String,
-    pub data: Vec<u8>,
-    pub priority: i32,
-}
-
-#[derive(Serialize, Deserialize)]
-#[napi(object)]
-pub struct Result {
-    pub id: String,
-    pub output: String,
-    pub processed: bool,
+#[napi]
+pub fn greet(name: String) -> String {
+    format!("Hello from Rust, {}!", name)
 }
 
 #[napi]
-pub fn process_job(job: Job) -> Result {
-    Result {
-        id: job.id,
-        output: format!("Processed {} bytes", job.data.len()),
-        processed: true,
-    }
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
 }
 ```
 
-Create a `Cargo.toml`:
+Create `rust/Cargo.toml`:
 
 ```toml
 [package]
@@ -66,115 +64,37 @@ crate-type = ["cdylib"]
 napi = { version = "2", features = ["serde-json"] }
 napi-derive = "2"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 ```
 
 Build it:
 
 ```bash
-cd rust && cargo build --release
+cd rust
+cargo build --release
 cp target/release/libmy_rust_module.so index.node
+cd ..
 ```
 
-## 3. Create a Java service
+### Call it from JS
 
-```java
-// java/src/main/java/transit/java/TransitService.java
-package transit.java;
-
-public class TransitService {
-
-    public String processJob(String argsJson) {
-        return "{\"output\":\"Java processed: " + argsJson.length() + " chars\"}";
-    }
-
-    public String getVersion(String argsJson) {
-        return "{\"version\":\"1.0.0\"}";
-    }
-
-    public static void main(String[] args) throws Exception {
-        TransitServer server = new TransitServer();
-        TransitService service = new TransitService();
-        server.registerFunction("processJob", service::processJob);
-        server.registerFunction("getVersion", service::getVersion);
-        server.start();
-    }
-}
-```
-
-Compile it:
-
-```bash
-cd packages/transit-java-runtime
-javac -d build src/main/java/transit/java/*.java
-```
-
-## 4. Create a Python service
-
-```python
-# python/transit_service.py
-import json
-from transit_server import TransitServer, register_function
-
-def process_data(args_json):
-    """Process data and return a result."""
-    args = json.loads(args_json)
-    return json.dumps({
-        "output": f"Python processed: {len(args.get('data', []))} items",
-        "processed": True
-    })
-
-def get_version(args_json):
-    """Return the service version."""
-    return json.dumps({"version": "1.0.0"})
-
-if __name__ == "__main__":
-    server = TransitServer()
-    register_function("processData", process_data)
-    register_function("getVersion", get_version)
-    server.start()
-```
-
-## 5. Wire it up in JS
+Create `index.js`:
 
 ```js
-// index.js
 import { transit } from "transit"
 import { resolve } from "node:path"
 
 const __dirname = import.meta.dirname
 
-// Register codebases
+// Point Transit at the Rust directory
 const rs = transit.rust(resolve(__dirname, "./rust"))
-const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
-const py = transit.python(resolve(__dirname, "./python"))
 
-// Call Rust
-const rustResult = await rs.processJob({
-  id: "job-001",
-  data: [72, 101, 108, 108, 111],
-  priority: 1,
-})
-console.log("Rust:", rustResult)
-// { id: "job-001", output: "Processed 5 bytes", processed: true }
+// Call the functions
+const greeting = await rs.greet("World")
+console.log(greeting)  // "Hello from Rust, World!"
 
-// Call Java
-const javaResult = await jv.processJob({
-  id: "job-001",
-  data: [1, 2, 3],
-})
-console.log("Java:", javaResult)
-// { output: "Java processed: 24 chars" }
-
-// Call Python
-const pythonResult = await py.processData({
-  id: "job-001",
-  data: [10, 20, 30],
-})
-console.log("Python:", pythonResult)
-// { output: "Python processed: 3 items", processed: true }
-
-// List all discovered functions
-transit.info()
+const sum = await rs.add({ a: 10, b: 20 })
+console.log(sum)  // 30
 ```
 
 Run it:
@@ -183,108 +103,240 @@ Run it:
 node index.js
 ```
 
-## 6. File disambiguation
+You should see:
+```
+Hello from Rust, World!
+30
+```
 
-If two files export functions with the same name, use the qualified form:
+## 3. Add Java
+
+### Create the Java service
+
+Create `java/src/main/java/com/example/App.java`:
+
+```java
+package com.example;
+
+import transit.java.TransitServer;
+
+public class App {
+    public String processJob(String argsJson) {
+        return "{\"output\": \"Java says: job received\"}";
+    }
+
+    public String getVersion(String argsJson) {
+        return "{\"version\": \"1.0.0\"}";
+    }
+
+    public static void main(String[] args) throws Exception {
+        TransitServer server = new TransitServer();
+        App app = new App();
+        server.registerFunction("processJob", app::processJob);
+        server.registerFunction("getVersion", app::getVersion);
+        server.start();
+    }
+}
+```
+
+### Build the Java classes
+
+You need the Transit Java runtime (which provides `TransitServer`). If you're using Transit from a monorepo, it's at `packages/transit-java-runtime`. Otherwise, copy `TransitServer.java` into your project.
+
+```bash
+# From the transit monorepo root:
+cd packages/transit-java-runtime
+javac -d build src/main/java/transit/java/*.java
+cd ../..
+
+# Copy your app code (adjust classpath to include TransitServer)
+javac -cp packages/transit-java-runtime/build -d java/build java/src/main/java/com/example/*.java
+```
+
+### Call from JS
+
+Update your `index.js`:
+
+```js
+import { transit } from "transit"
+import { resolve } from "node:path"
+
+const __dirname = import.meta.dirname
+
+const rs = transit.rust(resolve(__dirname, "./rust"))
+const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
+
+// Call Rust
+console.log(await rs.greet("World"))
+
+// Call Java
+const jobResult = await jv.processJob({})
+console.log(jobResult)  // {"output": "Java says: job received"}
+
+const version = await jv.getVersion({})
+console.log(version)  // {"version": "1.0.0"}
+```
+
+## 4. Add Python
+
+### Create the Python service
+
+Create `python/service.py`:
+
+```python
+import json
+import sys
+import os
+
+# Add the transit Python runtime to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "transit-py-runtime"))
+
+from transit_server import TransitServer, register_function
+
+def process_data(args_json):
+    args = json.loads(args_json)
+    items = args.get("items", [])
+    return json.dumps({
+        "output": f"Python processed {len(items)} items",
+        "processed": True
+    })
+
+def get_stats(args_json):
+    return json.dumps({"status": "healthy", "language": "python"})
+
+if __name__ == "__main__":
+    server = TransitServer()
+    register_function("processData", process_data)
+    register_function("getStats", get_stats)
+    server.start()
+```
+
+### Call from JS
+
+```js
+import { transit } from "transit"
+import { resolve } from "node:path"
+
+const __dirname = import.meta.dirname
+
+const rs = transit.rust(resolve(__dirname, "./rust"))
+const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
+const py = transit.python(resolve(__dirname, "./python"))
+
+// Call all three languages
+console.log(await rs.greet("Transit"))
+console.log(await jv.processJob({}))
+console.log(await py.processData({ items: [1, 2, 3] }))
+```
+
+## 5. See what Transit found
+
+```js
+transit.info()
+// rust (./rust): 2 functions
+//   - greet [tier 1]
+//   - add [tier 1]
+// java (./java/src/main/java): 2 functions
+//   - processJob [tier 1]
+//   - getVersion [tier 1]
+// python (./python): 2 functions
+//   - processData [tier 1]
+//   - getStats [tier 1]
+```
+
+## Using the CLI
+
+Transit includes a CLI to help manage your project.
+
+### Initialize your project
+
+```bash
+transit init
+```
+
+This scans your source files and creates a `transit.config.json` with your language directories.
+
+### Development mode
+
+```bash
+transit dev
+```
+
+Watches for file changes and re-scans automatically. No restart needed when you add new functions.
+
+### Build for production
+
+```bash
+transit build
+```
+
+Generates typed TypeScript stubs (`transit.gen.ts`) and compiles Rust/Java. Writes `dist/transit-manifest.json`.
+
+### Run in production
+
+```bash
+transit start --entry index.js
+```
+
+Starts resident processes (Java, Python) and runs your app. Handles graceful shutdown on Ctrl+C.
+
+## How function discovery works
+
+You don't need to register functions manually. Transit scans your code and finds them automatically:
+
+| Language | What Transit finds |
+|----------|-------------------|
+| **Rust** | `pub fn` functions (Tier 1) |
+| **Java** | `public` methods with signature `(String) -> String` (Tier 1) |
+| **Python** | Functions registered with `register_function()` (Tier 1) |
+
+If you have multiple files with functions of the same name, use the qualified form:
 
 ```js
 await rustTransit["lib"]["processJob"](job)
-// or dot notation:
+// or
 await rustTransit.lib.processJob(job)
 ```
 
-## How discovery works
+## File layout
 
-When you call `transit.rust("./rust")`, Transit:
+A typical Transit project looks like this:
 
-1. Walks the directory (skipping `node_modules`, `target`, etc.)
-2. Parses each `.rs` file with tree-sitter (Rust grammar)
-3. Detects `pub fn` declarations (Tier 1)
-4. Detects `// transit:file` and `// transit:function` markers (Tiers 2/3)
-5. Builds a manifest of all discovered functions
-6. Returns a `Proxy` that resolves function names against this manifest
-
-The scanner runs once at startup. In dev mode, use `transit dev` to watch for file changes and update the manifest incrementally.
-
-## 7. Using the CLI
-
-### `transit init`
-
-Scans your source files for `transit.rust()`, `transit.java()`, and `transit.python()` calls. Detects which languages are in use and writes `transit.config.json`.
-
-```bash
-transit init              # Detect languages and write config
-transit init --dry-run    # Preview what would be written
+```
+my-project/
+  rust/
+    src/lib.rs          # Your Rust functions
+    Cargo.toml
+  java/
+    src/main/java/...   # Your Java functions
+  python/
+    service.py          # Your Python functions
+  index.js              # Your JS entry point
+  transit.config.json   # Generated by transit init
 ```
 
-### `transit dev`
+## Troubleshooting
 
-Starts a live development server that watches for file changes and re-scans directories automatically.
-
+**"Scanner not available"** — Build the scanner first:
 ```bash
-transit dev               # Start watching for changes
-transit dev --verbose     # Show per-file scan results
+cd packages/transit-scanner
+cargo build --release
+cp target/release/libtransit_scanner.so index.node
 ```
 
-The dev server:
-- Loads `transit.config.json` (or auto-discovers language directories)
-- Scans all registered directories on startup using the tree-sitter scanner
-- Watches for file changes and logs function additions/removals
-- Clean shutdown with Ctrl+C
+**"Python transit_server.py not found"** — Make sure `transit_server.py` is in your Python directory. It's at `packages/transit-py-runtime/transit_server.py` in the Transit monorepo.
 
-### `transit build`
-
-Runs the build pipeline: scan → codegen → compile.
-
+**"Java class not found"** — Compile your Java code:
 ```bash
-transit build                      # Generate stubs and compile
-transit build --codegen-only       # Generate stubs without compiling
-transit build --verbose            # Show detailed output
+javac -d build src/main/java/**/*.java
 ```
 
-The build command:
-- Scans all registered directories
-- Generates `transit.gen.ts` with typed function interfaces
-- Generates Java/Python glue code if needed
-- Compiles Rust and Java
-- Writes `dist/transit-manifest.json` for production mode
-- Exits with code 1 on compilation failure
-
-### `transit start`
-
-Runs the production build with resident processes.
-
-```bash
-transit start                          # Run with default entry point (src/index.js)
-transit start --entry src/app.js       # Specify custom entry point
-transit start --verbose                # Show resident process logs
-```
-
-The start command:
-- Loads the build manifest from `dist/transit-manifest.json`
-- Starts resident processes (Java, Python) based on manifest
-- Runs your application entry point
-- Forwards SIGTERM/SIGINT for graceful shutdown
-- Exits with code 1 if manifest or entry point is missing
-
-## 8. Production workflow
-
-```bash
-# 1. Initialize your project
-transit init
-
-# 2. Write your code (Rust, Java, Python functions)
-
-# 3. Build everything
-transit build
-
-# 4. Run in production
-transit start --entry src/index.js
-```
+**Functions not showing up in `transit.info()`** — Check that your functions match the expected signatures. Rust needs `pub fn`, Java needs `public` methods returning `String`, Python needs `register_function()`.
 
 ## Next steps
 
 - [API Reference](api-reference.md) — full API documentation
-- [Export Tiers](export-tiers.md) — three-tier function discovery system
-- [Binary Protocol](binary-protocol.md) — how JS ↔ Java communication works
+- [Export Tiers](export-tiers.md) — how function discovery works in detail
+- [Binary Protocol](binary-protocol.md) — how JS ↔ Java/Python communication works
 - [Architecture](architecture.md) — system design deep dive
+- [Contributing](contributing.md) — help improve Transit

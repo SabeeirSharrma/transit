@@ -20,6 +20,10 @@ Thumbs.db
 
 # Transit
 transit.config.json
+transit.gen.ts
+transit.gen.js
+TransitService.gen.java
+transit_service.gen.py
 
 # Rust
 **/*.rs.bk

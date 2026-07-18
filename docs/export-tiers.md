@@ -149,10 +149,10 @@ The scanner produces a manifest entry for each discovered function:
 {
   "language": "rust",
   "sourceFile": "/path/to/lib.rs",
-  "function_name": "process_general",
+  "functionName": "process_general",
   "signature": "pub fn process_general(job: FileJob) -> ProcessResult",
-  "export_tier": 1
+  "exportTier": 1
 }
 ```
 
-The transit-js layer normalizes `function_name` to support both snake_case and camelCase lookups.
+The transit-js layer normalizes names to support both `snake_case` and `camelCase` lookups. A Rust function `process_general` is callable as both `rs.process_general()` and `rs.processGeneral()`.

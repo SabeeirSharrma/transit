@@ -7,42 +7,39 @@ Development guide for the Transit monorepo.
 - **Node.js** >= 20
 - **bun** (package manager)
 - **Rust** toolchain (for scanner and native addons)
-- **Java** JDK 21+ (for Java runtime testing)
+- **Java** JDK 21+ (for Java runtime)
+- **Python** 3.10+ (for Python runtime)
 
 ## Repository Structure
 
 ```
 transit/
   packages/
-    transit-js/              # Public API (TypeScript → dist/index.js)
-    transit-scanner/         # Rust tree-sitter scanner (native addon)
-    transit-schema/          # Shared IDL types (TypeScript)
-    transit-rust-runtime/    # napi-rs bridge (Rust)
-    transit-java-runtime/    # Java TCP server (Java)
-    transit-java-runtime-js/ # Java bridge client (TypeScript)
+    transit-js/                 # Public API (TypeScript → dist/index.js)
+    transit-scanner/            # Rust tree-sitter scanner (native addon)
+    transit-schema/             # Shared types and config (TypeScript)
+    transit-rust-runtime/       # napi-rs bridge (Rust)
+    transit-java-runtime/       # Java TCP server (Java)
+    transit-java-runtime-js/    # Java bridge client (TypeScript)
+    transit-py-runtime/         # Python TCP server (Python)
+    transit-python-runtime-js/  # Python bridge client (TypeScript)
+    transit-codegen/            # Code generation (TypeScript)
   cli/
-    transit-cli/             # CLI tool (skeleton)
+    transit-cli/                # CLI tool — init, dev, build, start
   examples/
-    js-rust-java-demo/       # Working demo
-  docs/                      # Documentation
+    js-rust-java-demo/          # Working demo
+  docs/                         # Documentation
 ```
 
 ## Building
 
-### Install dependencies
+### Install all dependencies
 
 ```bash
 bun install
 ```
 
-### Build transit-js
-
-```bash
-cd packages/transit-js
-./node_modules/.bin/tsc
-```
-
-### Build the scanner (Rust)
+### Build the scanner (Rust native addon)
 
 ```bash
 cd packages/transit-scanner
@@ -50,7 +47,19 @@ cargo build --release
 cp target/release/libtransit_scanner.so index.node
 ```
 
-The `.node` file is the compiled native addon. The `index.js` wrapper loads it via `process.dlopen` for `.so` files or `require()` for `.node` files.
+### Build transit-js
+
+```bash
+cd packages/transit-js
+bun run build
+```
+
+### Build the CLI
+
+```bash
+cd cli/transit-cli
+bun run build
+```
 
 ### Build Java classes
 
@@ -90,6 +99,23 @@ process.exit(0);
 "
 ```
 
+### Python smoke test
+
+```bash
+timeout 15 node --input-type=module -e "
+import { transit } from './packages/transit-js/dist/index.js';
+import { resolve } from 'node:path';
+
+const py = transit.python(resolve('packages/transit-py-runtime'));
+
+const result = await py.processData({ items: [1, 2, 3] });
+console.log('Python:', result);
+
+await py._bridge.stop();
+process.exit(0);
+"
+```
+
 ### Scanner test
 
 ```bash
@@ -98,6 +124,19 @@ const { scanDirectory } = require('./packages/transit-scanner/index.js');
 const result = scanDirectory('packages/transit-java-runtime/src/main/java');
 console.log(JSON.parse(result).entries.length, 'functions found');
 "
+```
+
+### CLI test
+
+```bash
+# Test init
+node cli/transit-cli/dist/index.js init --dry-run
+
+# Test build (codegen only)
+node cli/transit-cli/dist/index.js build --codegen-only
+
+# Test help
+node cli/transit-cli/dist/index.js --help
 ```
 
 ## Architecture Notes
@@ -125,18 +164,42 @@ Two packages:
 
 The Java server uses TCP (not Unix sockets) because `UnixDomainSocketAddress` is not supported on all platforms. The server binds to `127.0.0.1` on an ephemeral port.
 
+### Python Runtime
+
+Two packages:
+- `transit-py-runtime/` — the Python server code (`transit_server.py`)
+- `transit-python-runtime-js/` — the Node.js client (`PythonProcessManager`)
+
+Same binary protocol as Java. Uses only Python stdlib (no external dependencies).
+
+### Codegen (transit-codegen)
+
+Generates typed stubs from scanner manifests:
+- `generateTypeScript()` — produces `transit.gen.ts`
+- `generateJavaGlue()` — produces `TransitService.gen.java`
+- `generatePythonGlue()` — produces `transit_service.gen.py`
+
+### CLI (transit-cli)
+
+Commands:
+- `transit init` — detects languages, writes config
+- `transit dev` — live development with file watching
+- `transit build` — scan → codegen → compile pipeline
+- `transit start` — production mode with resident processes
+
 ## Known Issues / TODOs
 
-- **Build mode:** Codegen and typed stubs not implemented
-- **CLI:** `transit dev` / `transit build` / `transit start` are skeleton commands
-- **File watchers:** No file-change detection for live reload in dev mode
-- **Binary protocol:** Currently JSON-serialized arguments over the wire; a purpose-built binary encoding (FlatBuffers/Cap'n Proto) is planned
+- **Error normalization:** `TransitError` class not yet implemented (Phase 6)
+- **Schema file:** The `transit.config.schema.json` format is not yet defined
+- **Python auto-import:** `transit init` doesn't auto-insert import statements
+- **`transit start` entry point:** Currently uses `--import ./transit.gen.js` which requires ESM support in the entry point
 
 ## Code Style
 
 - TypeScript: 2-space indent, double quotes, semicolons
 - Rust: standard `rustfmt`
 - Java: standard Oracle style
+- Python: PEP 8
 - Commit messages: imperative mood, concise (e.g., "fix scanner toggle bug", "add Java TCP bridge")
 
 ## Pull Requests

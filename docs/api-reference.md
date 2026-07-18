@@ -55,7 +55,7 @@ const jv = transit.java("./java/src/main/java")
 
 Scans a Python source directory and returns a language handle.
 
-```python
+```js
 const py = transit.python("./python")
 ```
 
@@ -264,3 +264,13 @@ All registrations are case-insensitive for the first letter and support both sna
 5. Subsequent calls go through the TCP connection
 6. If the process crashes, it auto-restarts (up to 3 times)
 7. Call `jv._bridge.stop()` to shut down the Java process
+
+### Python bridge
+
+1. `transit.python(dir)` scans the directory and creates a handle
+2. First function call spawns the Python process
+3. The process prints `PORT=<port>` to stdout on startup
+4. The bridge connects via TCP and starts health checks
+5. Subsequent calls go through the TCP connection
+6. If the process crashes, it auto-restarts (up to 3 times)
+7. Call `py._bridge.stop()` to shut down the Python process

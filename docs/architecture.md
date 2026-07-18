@@ -129,7 +129,7 @@ Command-line interface for Transit development workflow.
 - `transit init` — Scans source files for `transit.rust()`, `transit.java()`, `transit.python()` calls, detects languages, and writes `transit.config.json`
 - `transit dev` — Live development mode with file watching, automatic re-scanning, and function change logging
 - `transit build` — Build pipeline that orchestrates scan → codegen → compile. Generates typed stubs and compiles Rust/Java code
-- `transit start` — (planned) Production mode with built artifacts
+- `transit start` — Production mode with built artifacts, resident processes, and signal forwarding
 
 ## Transport Strategies
 
@@ -195,7 +195,7 @@ See [binary-protocol.md](binary-protocol.md) for the wire format specification.
 4. Python process is spawned, PORT=<port> is read from stdout
 5. TCP connection is established to 127.0.0.1:<port>
 6. Binary protocol: CALL_REQUEST message sent
-7. TransitServer dispatches to the registered function
+7. transit_server.py dispatches to the registered function
 8. Function returns a JSON string
 9. CALL_RESPONSE message received by PythonProcessManager
 10. Result string is returned to the caller
@@ -214,13 +214,15 @@ See [binary-protocol.md](binary-protocol.md) for the wire format specification.
 - Python: spawns a resident Python process on first call
 - Optimized for iteration speed, not raw throughput
 
-### Build mode (planned)
+### Build mode
 
-- Codegen replaces dynamic `Proxy` with generated typed stubs
+- `transit build` runs the scan → codegen → compile pipeline
+- Codegen replaces dynamic `Proxy` with generated typed stubs (`transit.gen.ts`)
 - Rust: `cargo build --release` produces an optimized `.node` addon
-- Java: compiled classes + managed subprocess packaging
-- No runtime scanning, no name resolution overhead
-- Required before production deployment
+- Java: `javac` compiles classes
+- `dist/transit-manifest.json` records all discovered functions and compilation status
+- `transit start` loads the manifest and runs in production mode
+- No runtime scanning overhead in production
 
 ## Directory Walking
 
