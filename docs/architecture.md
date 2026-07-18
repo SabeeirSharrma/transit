@@ -112,6 +112,15 @@ The Node.js client for the Python TCP bridge.
 
 Shared type definitions for the Transit IDL, manifest, and configuration.
 
+### transit-codegen (TypeScript)
+
+Code generation from scanner manifests. Produces typed stubs and glue code.
+
+**Generators:**
+- `generateTypeScript(manifest)` — produces `transit.gen.ts` with typed function interfaces and a `createTransit()` factory
+- `generateJavaGlue(manifest)` — produces `TransitService.gen.java` with function registration stubs
+- `generatePythonGlue(manifest)` — produces `transit_service.gen.py` with function stubs and camelCase registrations
+
 ### transit-cli (TypeScript)
 
 Command-line interface for Transit development workflow.
@@ -119,7 +128,7 @@ Command-line interface for Transit development workflow.
 **Commands:**
 - `transit init` — Scans source files for `transit.rust()`, `transit.java()`, `transit.python()` calls, detects languages, and writes `transit.config.json`
 - `transit dev` — Live development mode with file watching, automatic re-scanning, and function change logging
-- `transit build` — (planned) Codegen and compilation for all registered languages
+- `transit build` — Build pipeline that orchestrates scan → codegen → compile. Generates typed stubs and compiles Rust/Java code
 - `transit start` — (planned) Production mode with built artifacts
 
 ## Transport Strategies

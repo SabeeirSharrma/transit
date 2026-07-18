@@ -14,7 +14,8 @@
   "dependencies": {
     "transit": "workspace:*",
     "@transit/schema": "workspace:*",
-    "@transit/scanner": "workspace:*"
+    "@transit/scanner": "workspace:*",
+    "@transit/codegen": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

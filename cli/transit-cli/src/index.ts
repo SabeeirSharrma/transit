@@ -30,14 +30,17 @@ Commands:
   start     Run the production build
 
 Options:
-  --help        Show this message
-  --verbose     Verbose output (per-file scan results)
-  --dry-run     Init only: show what would be written without writing
+  --help          Show this message
+  --verbose       Verbose output (per-file scan results)
+  --dry-run       Init only: show what would be written without writing
+  --codegen-only  Build only: skip compilation, generate stubs only
 
 Examples:
-  transit init             # Detect languages and write transit.config.json
-  transit dev              # Start watching for changes
-  transit dev --verbose    # Show per-file scan results
+  transit init               # Detect languages and write transit.config.json
+  transit dev                # Start watching for changes
+  transit dev --verbose      # Show per-file scan results
+  transit build              # Generate stubs and compile
+  transit build --codegen-only  # Generate stubs without compiling
 `;
 
 async function main() {
@@ -71,10 +74,14 @@ async function main() {
     }
 
     case "build": {
-      console.log("[transit] Running build...");
-      // TODO: Phase 5 — Load config, run scanner, codegen, compile
-      console.log("[transit] Build not yet implemented.");
-      console.log("[transit] Use `transit dev` for development mode.");
+      const { build } = await import("./build.js");
+      const result = await build({
+        verbose: hasFlag("verbose"),
+        codegenOnly: hasFlag("codegen-only"),
+      });
+      if (Object.values(result.compiled).some((r) => !r.success)) {
+        console.log("\n[transit] Some compilations failed. Generated files are still available.");
+      }
       break;
     }
 
