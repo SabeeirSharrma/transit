@@ -34,4 +34,4 @@ __pycache__/
 plan.md
 
 # Cache
-**/.transit/-cache.json
+**/.transit-cache.json
