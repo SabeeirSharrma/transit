@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/java-runtime",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Node.js bridge for Transit Java resident-process (binary protocol client)",
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sabeeirsharrma/schema": "^1.0.1"
+    "@sabeeirsharrma/schema": "^1.0.2"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

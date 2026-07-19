@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/schema",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Transit IDL schema definitions and parser",
   "type": "module",
   "main": "dist/index.js",

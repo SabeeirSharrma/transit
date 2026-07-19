@@ -1,5 +1,18 @@
 # transit-cli
 
+## 1.0.2
+
+### Patch Changes
+
+- re: add READMEs
+- 3640fb4: Just add a script to automatically add readme on publish
+- Updated dependencies
+- Updated dependencies [3640fb4]
+  - @sabeeirsharrma/codegen@1.0.2
+  - transit@1.0.2
+  - @sabeeirsharrma/scanner@1.0.2
+  - @sabeeirsharrma/schema@1.0.2
+
 ## 1.0.1
 
 ### Patch Changes
