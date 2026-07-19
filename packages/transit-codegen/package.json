@@ -1,6 +1,6 @@
 {
   "name": "@transit/codegen",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Code generation for Transit — produces typed stubs and glue code from manifests",
   "type": "module",
   "main": "dist/index.js",
@@ -15,5 +15,8 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

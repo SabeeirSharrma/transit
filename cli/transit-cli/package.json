@@ -1,6 +1,6 @@
 {
   "name": "transit-cli",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Transit CLI — transit dev, transit build, transit start",
   "type": "module",
   "bin": {
@@ -20,5 +20,8 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

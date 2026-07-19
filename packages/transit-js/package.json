@@ -1,6 +1,6 @@
 {
   "name": "transit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Languages that just talk to each other. No API. No middleman.",
   "type": "module",
   "main": "dist/index.js",
@@ -25,5 +25,8 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

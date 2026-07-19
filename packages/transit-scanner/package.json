@@ -1,6 +1,6 @@
 {
   "name": "@transit/scanner",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Tree-sitter-based function discovery engine for Transit (Rust native addon)",
   "main": "index.js",
   "types": "index.d.ts",
@@ -20,5 +20,9 @@
   },
   "napi-dev-dependencies": {
     "husky": "^9.0.0"
+  },
+  "optionalDependencies": {},
+  "publishConfig": {
+    "access": "public"
   }
 }

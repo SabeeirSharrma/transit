@@ -1,6 +1,6 @@
 {
   "name": "@transit/python-runtime",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Node.js bridge for Transit Python resident-process",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,5 +12,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

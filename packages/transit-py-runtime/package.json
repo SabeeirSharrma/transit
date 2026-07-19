@@ -1,9 +1,12 @@
 {
   "name": "@transit/py-runtime",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Python resident-process server for Transit polyglot interop",
   "main": "transit_server.py",
   "scripts": {
     "test": "python3 -c \"from transit_server import TransitServer; print('OK')\""
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
