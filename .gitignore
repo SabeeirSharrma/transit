@@ -39,3 +39,5 @@ plan.md
 
 # Cache
 **/.transit-cache.json
+
+/.astro/
