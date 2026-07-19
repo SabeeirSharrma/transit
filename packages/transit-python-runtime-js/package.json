@@ -1,5 +1,5 @@
 {
-  "name": "@transit/python-runtime",
+  "name": "@sabeeirsharrma/python-runtime",
   "version": "1.0.0",
   "description": "Node.js bridge for Transit Python resident-process",
   "main": "dist/index.js",

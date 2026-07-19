@@ -1,5 +1,5 @@
 /**
- * @transit/schema — IDL Parser
+ * @sabeeirsharrma/schema — IDL Parser
  *
  * Parses Transit IDL schema files (.schema) into TransitSchema objects.
  * The IDL is intentionally simple — indentation-based, no semicolons,

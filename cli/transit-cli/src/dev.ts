@@ -40,7 +40,7 @@ let scannerModule: any = null;
 
 async function loadScanner(): Promise<boolean> {
   try {
-    const imported = await import("@transit/scanner");
+    const imported = await import("@sabeeirsharrma/scanner");
     scannerModule = imported.default ?? imported;
     return true;
   } catch {

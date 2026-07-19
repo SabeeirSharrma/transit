@@ -1,4 +1,4 @@
-# @transit/java-runtime
+# @sabeeirsharrma/java-runtime
 
 ## 1.0.0
 
@@ -9,4 +9,4 @@
 ### Patch Changes
 
 - Updated dependencies [298063f]
-  - @transit/schema@1.0.0
+  - @sabeeirsharrma/schema@1.0.0

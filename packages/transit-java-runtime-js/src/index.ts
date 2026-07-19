@@ -1,5 +1,5 @@
 /**
- * @transit/java-runtime — Node.js bridge for Transit Java resident-process
+ * @sabeeirsharrma/java-runtime — Node.js bridge for Transit Java resident-process
  *
  * Manages the Java process lifecycle (start/stop/health-check) and
  * implements the binary protocol client for JS↔Java communication.

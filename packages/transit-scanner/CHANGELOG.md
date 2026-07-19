@@ -1,4 +1,4 @@
-# @transit/scanner
+# @sabeeirsharrma/scanner
 
 ## 1.0.0
 

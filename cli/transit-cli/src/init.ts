@@ -10,7 +10,7 @@
 
 import { resolve, join, relative, dirname } from "node:path";
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import type { TransitConfig } from "@transit/schema";
+import type { TransitConfig } from "@sabeeirsharrma/schema";
 
 // ─── Language detection ──────────────────────────────────────────────────────
 

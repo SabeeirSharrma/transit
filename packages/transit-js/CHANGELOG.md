@@ -9,7 +9,7 @@
 ### Patch Changes
 
 - Updated dependencies [298063f]
-  - @transit/python-runtime@1.0.0
-  - @transit/scanner@1.0.0
-  - @transit/java-runtime@1.0.0
-  - @transit/schema@1.0.0
+  - @sabeeirsharrma/python-runtime@1.0.0
+  - @sabeeirsharrma/scanner@1.0.0
+  - @sabeeirsharrma/java-runtime@1.0.0
+  - @sabeeirsharrma/schema@1.0.0

@@ -128,7 +128,7 @@ transit.reloadConfig("/app")  // reload from a different dir
 
 ---
 
-## Config Functions (from `@transit/schema`)
+## Config Functions (from `@sabeeirsharrma/schema`)
 
 These are also re-exported from the `transit` package for convenience.
 

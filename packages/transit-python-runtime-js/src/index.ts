@@ -1,5 +1,5 @@
 /**
- * @transit/python-runtime — Node.js bridge for Transit Python resident-process
+ * @sabeeirsharrma/python-runtime — Node.js bridge for Transit Python resident-process
  *
  * Manages the Python process lifecycle (start/stop/health-check) and
  * implements the binary protocol client for JS↔Python communication.

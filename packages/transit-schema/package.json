@@ -1,5 +1,5 @@
 {
-  "name": "@transit/schema",
+  "name": "@sabeeirsharrma/schema",
   "version": "1.0.0",
   "description": "Transit IDL schema definitions and parser",
   "type": "module",

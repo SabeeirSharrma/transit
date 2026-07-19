@@ -1,5 +1,5 @@
 /**
- * @transit/schema — Config loader
+ * @sabeeirsharrma/schema — Config loader
  *
  * Reads, validates, and normalizes transit.config.json.
  * All functions are pure — no side effects, no file watchers.

@@ -36,7 +36,7 @@ function loadNativeAddon() {
   }
 
   throw new Error(
-    "@transit/scanner: native addon not built. Run 'cargo build --release' in packages/transit-scanner/"
+    "@sabeeirsharrma/scanner: native addon not built. Run 'cargo build --release' in packages/transit-scanner/"
   );
 }
 

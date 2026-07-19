@@ -15,9 +15,9 @@
         "transit": "dist/index.js",
       },
       "dependencies": {
-        "@transit/codegen": "workspace:*",
-        "@transit/scanner": "workspace:*",
-        "@transit/schema": "workspace:*",
+        "@sabeeirsharrma/codegen": "workspace:*",
+        "@sabeeirsharrma/scanner": "workspace:*",
+        "@sabeeirsharrma/schema": "workspace:*",
         "transit": "workspace:*",
       },
       "devDependencies": {
@@ -33,10 +33,10 @@
       },
     },
     "packages/transit-codegen": {
-      "name": "@transit/codegen",
+      "name": "@sabeeirsharrma/codegen",
       "version": "0.1.0",
       "dependencies": {
-        "@transit/schema": "workspace:*",
+        "@sabeeirsharrma/schema": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -44,10 +44,10 @@
       },
     },
     "packages/transit-java-runtime-js": {
-      "name": "@transit/java-runtime",
+      "name": "@sabeeirsharrma/java-runtime",
       "version": "0.1.0",
       "dependencies": {
-        "@transit/schema": "workspace:*",
+        "@sabeeirsharrma/schema": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -58,10 +58,10 @@
       "name": "transit",
       "version": "0.1.0",
       "dependencies": {
-        "@transit/java-runtime": "workspace:*",
-        "@transit/python-runtime": "workspace:*",
-        "@transit/scanner": "workspace:*",
-        "@transit/schema": "workspace:*",
+        "@sabeeirsharrma/java-runtime": "workspace:*",
+        "@sabeeirsharrma/python-runtime": "workspace:*",
+        "@sabeeirsharrma/scanner": "workspace:*",
+        "@sabeeirsharrma/schema": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -69,11 +69,11 @@
       },
     },
     "packages/transit-py-runtime": {
-      "name": "@transit/py-runtime",
+      "name": "@sabeeirsharrma/py-runtime",
       "version": "0.1.0",
     },
     "packages/transit-python-runtime-js": {
-      "name": "@transit/python-runtime",
+      "name": "@sabeeirsharrma/python-runtime",
       "version": "0.1.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -81,14 +81,14 @@
       },
     },
     "packages/transit-scanner": {
-      "name": "@transit/scanner",
+      "name": "@sabeeirsharrma/scanner",
       "version": "0.1.0",
       "devDependencies": {
         "@napi-rs/cli": "^3.0.0",
       },
     },
     "packages/transit-schema": {
-      "name": "@transit/schema",
+      "name": "@sabeeirsharrma/schema",
       "version": "0.1.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -309,17 +309,17 @@
 
     "@octokit/types": ["@octokit/types@16.0.0", "", { "dependencies": { "@octokit/openapi-types": "^27.0.0" } }, "sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg=="],
 
-    "@transit/codegen": ["@transit/codegen@workspace:packages/transit-codegen"],
+    "@sabeeirsharrma/codegen": ["@sabeeirsharrma/codegen@workspace:packages/transit-codegen"],
 
-    "@transit/java-runtime": ["@transit/java-runtime@workspace:packages/transit-java-runtime-js"],
+    "@sabeeirsharrma/java-runtime": ["@sabeeirsharrma/java-runtime@workspace:packages/transit-java-runtime-js"],
 
-    "@transit/py-runtime": ["@transit/py-runtime@workspace:packages/transit-py-runtime"],
+    "@sabeeirsharrma/py-runtime": ["@sabeeirsharrma/py-runtime@workspace:packages/transit-py-runtime"],
 
-    "@transit/python-runtime": ["@transit/python-runtime@workspace:packages/transit-python-runtime-js"],
+    "@sabeeirsharrma/python-runtime": ["@sabeeirsharrma/python-runtime@workspace:packages/transit-python-runtime-js"],
 
-    "@transit/scanner": ["@transit/scanner@workspace:packages/transit-scanner"],
+    "@sabeeirsharrma/scanner": ["@sabeeirsharrma/scanner@workspace:packages/transit-scanner"],
 
-    "@transit/schema": ["@transit/schema@workspace:packages/transit-schema"],
+    "@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@workspace:packages/transit-schema"],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg=="],
 

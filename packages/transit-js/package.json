@@ -17,10 +17,10 @@
     "test": "node --test dist/**/*.test.js"
   },
   "dependencies": {
-    "@transit/schema": "workspace:*",
-    "@transit/scanner": "workspace:*",
-    "@transit/java-runtime": "workspace:*",
-    "@transit/python-runtime": "workspace:*"
+    "@sabeeirsharrma/schema": "workspace:*",
+    "@sabeeirsharrma/scanner": "workspace:*",
+    "@sabeeirsharrma/java-runtime": "workspace:*",
+    "@sabeeirsharrma/python-runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

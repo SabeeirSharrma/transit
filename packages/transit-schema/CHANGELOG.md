@@ -1,4 +1,4 @@
-# @transit/schema
+# @sabeeirsharrma/schema
 
 ## 1.0.0
 

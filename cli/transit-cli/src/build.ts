@@ -8,7 +8,7 @@
 import { resolve, join } from "node:path";
 import { writeFileSync, copyFileSync, existsSync, readFileSync, readdirSync, statSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
-import type { Manifest, ManifestEntry } from "@transit/schema";
+import type { Manifest, ManifestEntry } from "@sabeeirsharrma/schema";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ let scannerModule: any = null;
 
 async function loadScanner(): Promise<boolean> {
   try {
-    const imported = await import("@transit/scanner");
+    const imported = await import("@sabeeirsharrma/scanner");
     scannerModule = imported.default ?? imported;
     return true;
   } catch {
@@ -367,7 +367,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   };
 
   // Import codegen dynamically
-  const { generateTypeScript, generateJavaGlue, generatePythonGlue } = await import("@transit/codegen");
+  const { generateTypeScript, generateJavaGlue, generatePythonGlue } = await import("@sabeeirsharrma/codegen");
 
   // Generate TypeScript
   const tsCode = generateTypeScript(manifest, { outputPath: "transit.gen.ts" });

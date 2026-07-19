@@ -1,5 +1,5 @@
 /**
- * @transit/schema — Transit IDL type definitions and parser
+ * @sabeeirsharrma/schema — Transit IDL type definitions and parser
  *
  * Defines the shared type system that all Transit packages consume.
  * The schema describes types and service functions that span language boundaries.

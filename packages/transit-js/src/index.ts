@@ -13,8 +13,8 @@
 
 import { resolve, join, dirname } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import type { Manifest, ManifestEntry, TransitConfig, BuildOverride } from "@transit/schema";
-import { loadConfigWithDefaults } from "@transit/schema";
+import type { Manifest, ManifestEntry, TransitConfig, BuildOverride } from "@sabeeirsharrma/schema";
+import { loadConfigWithDefaults } from "@sabeeirsharrma/schema";
 
 // ─── Runtime bridge types ─────────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ let scannerModule: any = null;
 
 // Eagerly load the scanner native addon on module init
 try {
-  const imported = await import("@transit/scanner");
+  const imported = await import("@sabeeirsharrma/scanner");
   // CJS-to-ESM interop: static analysis may only lift some exports as named.
   // Fall back to the .default object (full CJS module.exports) if available.
   scannerModule = imported.default ?? imported;
@@ -373,7 +373,7 @@ class JavaDevBridge implements RuntimeBridge {
   async start(): Promise<void> {
     if (this.started) return;
 
-    const { JavaProcessManager } = await import("@transit/java-runtime");
+    const { JavaProcessManager } = await import("@sabeeirsharrma/java-runtime");
     const classpath = this.findClasspath();
     const mainClass = this.findMainClass(classpath);
 
@@ -462,7 +462,7 @@ class PythonDevBridge implements RuntimeBridge {
   async start(): Promise<void> {
     if (this.started) return;
 
-    const { PythonProcessManager } = await import("@transit/python-runtime");
+    const { PythonProcessManager } = await import("@sabeeirsharrma/python-runtime");
 
     this.processManager = new PythonProcessManager({
       pythonDir: this.dir,
@@ -621,5 +621,5 @@ export default transit;
 
 export { scanFileSync, invalidateFileCache, clearScanCache };
 
-export type { Manifest, ManifestEntry, TransitConfig, BuildOverride, LinkOverride, ExportOverride } from "@transit/schema";
-export { loadConfig, loadConfigWithDefaults, validateConfig, mergeWithDefaults } from "@transit/schema";
+export type { Manifest, ManifestEntry, TransitConfig, BuildOverride, LinkOverride, ExportOverride } from "@sabeeirsharrma/schema";
+export { loadConfig, loadConfigWithDefaults, validateConfig, mergeWithDefaults } from "@sabeeirsharrma/schema";

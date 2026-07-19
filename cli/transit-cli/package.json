@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "transit": "workspace:*",
-    "@transit/schema": "workspace:*",
-    "@transit/scanner": "workspace:*",
-    "@transit/codegen": "workspace:*"
+    "@sabeeirsharrma/schema": "workspace:*",
+    "@sabeeirsharrma/scanner": "workspace:*",
+    "@sabeeirsharrma/codegen": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

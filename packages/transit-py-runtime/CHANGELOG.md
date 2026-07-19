@@ -1,4 +1,4 @@
-# @transit/py-runtime
+# @sabeeirsharrma/py-runtime
 
 ## 1.0.0
 
