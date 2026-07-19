@@ -1,5 +1,13 @@
 # @sabeeirsharrma/codegen
 
+## 1.0.1
+
+### Patch Changes
+
+- PATCH FOR INSTALL
+- Updated dependencies
+  - @sabeeirsharrma/schema@1.0.1
+
 ## 1.0.0
 
 ### Major Changes

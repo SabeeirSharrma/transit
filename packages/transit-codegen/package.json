@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/codegen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Code generation for Transit — produces typed stubs and glue code from manifests",
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sabeeirsharrma/schema": "workspace:*"
+    "@sabeeirsharrma/schema": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

@@ -1,6 +1,6 @@
 {
   "name": "transit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Languages that just talk to each other. No API. No middleman.",
   "type": "module",
   "main": "dist/index.js",
@@ -17,10 +17,10 @@
     "test": "node --test dist/**/*.test.js"
   },
   "dependencies": {
-    "@sabeeirsharrma/schema": "workspace:*",
-    "@sabeeirsharrma/scanner": "workspace:*",
-    "@sabeeirsharrma/java-runtime": "workspace:*",
-    "@sabeeirsharrma/python-runtime": "workspace:*"
+    "@sabeeirsharrma/schema": "^1.0.1",
+    "@sabeeirsharrma/scanner": "^1.0.1",
+    "@sabeeirsharrma/java-runtime": "^1.0.1",
+    "@sabeeirsharrma/python-runtime": "^1.0.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
