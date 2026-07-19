@@ -11,6 +11,15 @@ export default defineConfig({
 			title: 'Transit',
 			tagline: 'Languages that just talk to each other. No API. No middleman.',
 			customCss: ['./src/styles/custom.css'],
+			head: [
+        {
+          tag: 'meta',
+          attrs: {
+            name: 'viewport',
+            content: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
+          },
+        },
+      ],
 			components: {
 				Footer: './src/components/Footer.astro',
 			},
