@@ -1,5 +1,19 @@
 # transit-cli
 
+## 2.0.0
+
+### Major Changes
+
+- Fix bugs and update docs
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/scanner@2.0.0
+  - transit@2.0.0
+  - @sabeeirsharrma/codegen@2.0.0
+  - @sabeeirsharrma/schema@2.0.0
+
 ## 1.0.2
 
 ### Patch Changes

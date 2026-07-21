@@ -1,5 +1,16 @@
 # js-rust-java-demo
 
+## 2.0.0
+
+### Major Changes
+
+- Fix bugs and update docs
+
+### Patch Changes
+
+- Updated dependencies
+  - transit@2.0.0
+
 ## 1.0.2
 
 ### Patch Changes

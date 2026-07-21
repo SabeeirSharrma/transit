@@ -1,5 +1,11 @@
 # @sabeeirsharrma/py-runtime
 
+## 2.0.0
+
+### Major Changes
+
+- Fix bugs and update docs
+
 ## 1.0.2
 
 ### Patch Changes
