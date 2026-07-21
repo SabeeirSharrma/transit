@@ -33,7 +33,7 @@ const rs = transit.rust("./rust")
 
 **Transport:** In-process native addon (via napi-rs). Zero serialization overhead.
 
-### `transit.java(dir): FunctionProxy`
+### `transit.java(dir, options?): FunctionProxy`
 
 Scans a Java source directory and returns a language handle.
 
@@ -43,6 +43,9 @@ const jv = transit.java("./java/src/main/java")
 
 **Parameters:**
 - `dir` (string) — path to the directory containing Java source files
+- `options` (optional):
+  - `classpath` (string) — Path to compiled Java classes. Transit auto-detects this by looking for `build/`, `out/`, or `target/` directories, but you can specify it explicitly.
+  - `mainClass` (string) — Fully qualified main class name. Default: `transit.java.TransitService`.
 
 **Returns:** A `FunctionProxy` — same interface as Rust.
 
@@ -54,7 +57,19 @@ const jv = transit.java("./java/src/main/java")
 
 **Transport:** TCP binary protocol on `127.0.0.1` (ephemeral port).
 
-### `transit.python(dir): FunctionProxy`
+**Examples:**
+```js
+// Auto-detect classpath
+const jv = transit.java("./java/src/main/java")
+
+// Explicit classpath and main class
+const jv = transit.java("./java", {
+  classpath: "./java/build",
+  mainClass: "com.example.App"
+})
+```
+
+### `transit.python(dir, options?): FunctionProxy`
 
 Scans a Python source directory and returns a language handle.
 
@@ -64,6 +79,8 @@ const py = transit.python("./python")
 
 **Parameters:**
 - `dir` (string) — path to the directory containing Python source files
+- `options` (optional):
+  - `serverScript` (string) — Custom entry point filename. Transit auto-detects `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, and `filters.py`. Use this if your file has a different name.
 
 **Returns:** A `FunctionProxy` — same interface as Rust/Java.
 
@@ -76,6 +93,19 @@ const py = transit.python("./python")
 - The Python process stays alive across calls (no cold starts)
 
 **Transport:** TCP binary protocol on `127.0.0.1` (ephemeral port), same protocol as Java.
+
+:::caution[Python functions receive JSON strings]
+Your Python functions receive a JSON **string**, not a dictionary. Always use `json.loads(args)` to parse it.
+:::
+
+**Examples:**
+```js
+// Auto-detect entry point
+const py = transit.python("./python")
+
+// Custom entry point
+const py = transit.python("./python", { serverScript: "filters.py" })
+```
 
 ### `transit.info(): void`
 

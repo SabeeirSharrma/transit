@@ -17,7 +17,7 @@ Before you begin, make sure you have:
 | **Java** JDK 21+ | For Java functions | `java --version` |
 | **Python** 3.10+ | For Python functions | `python3 --version` |
 
-** To install transit, use: **
+**To install transit, use:**
 ```bash
 bun install -g transit-cli  # you can use npm too
 ```
@@ -33,7 +33,19 @@ bun init -y
 bun install transit-cli
 ```
 
-## 2. Set up your first language
+## 2. Initialize your project (optional)
+
+Transit can scan your project and create a config file for you:
+
+```bash
+transit init
+```
+
+`transit init` scans your source files for `transit.rust()`, `transit.java()`, and `transit.python()` calls, detects which languages you are using, and creates `transit.config.json`. It is idempotent — safe to run multiple times.
+
+If you prefer to set things up manually, skip this step.
+
+## 3. Set up your first language
 
 Let's start with Rust since it has the best performance.
 
@@ -66,14 +78,33 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
-napi = { version = "2", features = ["serde-json"] }
-napi-derive = "2"
+napi = { version = "3", features = ["serde-json"] }
+napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[build-dependencies]
+napi-build = "3"
 ```
+
+Create `rust/build.rs` (required by napi-rs):
+
+```rust
+fn main() {
+    napi_build::setup();
+}
+```
+
+:::note[Required for Rust bridge]
+The `crate-type = ["cdylib", "lib"]` and `build.rs` are **required** for the Rust bridge to work. Without them, your functions will be discovered by the scanner but will fail at runtime because no native addon is created.
+:::
+
+:::caution[Always use #[napi]]
+Without `#[napi]`, the scanner will find your `pub fn` functions, but the Rust bridge will not be able to call them at runtime. Always use `#[napi]` on functions you want to call from JavaScript.
+:::
 
 Build it:
 
@@ -83,6 +114,10 @@ cargo build --release
 cp target/release/libmy_rust_module.so index.node
 cd ..
 ```
+
+:::tip[Mac users]
+On Mac, use `cp target/release/libmy_rust_module.dylib index.node` instead.
+:::
 
 ### Call it from JS
 
@@ -101,7 +136,7 @@ const rs = transit.rust(resolve(__dirname, "./rust"))
 const greeting = await rs.greet("World")
 console.log(greeting)  // "Hello from Rust, World!"
 
-const sum = await rs.add({ a: 10, b: 20 })
+const sum = await rs.add(10, 20)
 console.log(sum)  // 30
 ```
 
@@ -117,7 +152,7 @@ Hello from Rust, World!
 30
 ```
 
-## 3. Add Java
+## 4. Add Java
 
 ### Create the Java service
 
@@ -149,16 +184,19 @@ public class App {
 
 ### Build the Java classes
 
-You need the Transit Java runtime (which provides `TransitServer`). If you're using Transit from a monorepo, it's at `packages/transit-java-runtime`. Otherwise, copy `TransitServer.java` into your project.
+You need the Transit Java runtime (which provides `TransitServer`). Copy `TransitServer.java` into your project, or use the version from the Transit package:
 
 ```bash
-# From the transit monorepo root:
-cd packages/transit-java-runtime
-javac -d build src/main/java/transit/java/*.java
-cd ../..
+# Build the Transit Java runtime
+mkdir -p packages/transit-java-runtime/build
+javac -d packages/transit-java-runtime/build \
+  node_modules/transit/packages/transit-java-runtime/src/main/java/transit/java/*.java
 
-# Copy your app code (adjust classpath to include TransitServer)
-javac -cp packages/transit-java-runtime/build -d java/build java/src/main/java/com/example/*.java
+# Build your app
+mkdir -p java/build
+javac -cp packages/transit-java-runtime/build \
+  -d java/build \
+  java/src/main/java/com/example/*.java
 ```
 
 ### Call from JS
@@ -185,23 +223,47 @@ const version = await jv.getVersion({})
 console.log(version)  // {"version": "1.0.0"}
 ```
 
-## 4. Add Python
+:::tip[Custom classpath]
+If Transit cannot find your compiled Java classes, specify the classpath and main class explicitly:
+
+```js
+const jv = transit.java(resolve(__dirname, "./java"), {
+  classpath: resolve(__dirname, "./java/build"),
+  mainClass: "com.example.App"
+})
+```
+:::
+
+## 5. Add Python
+
+### Copy the Transit server into your project
+
+Transit needs a small Python server to handle communication with JavaScript. Copy it from the Transit package into your Python directory:
+
+```bash
+mkdir -p python
+cp node_modules/transit/packages/transit-py-runtime/transit_server.py python/
+```
+
+:::caution[Why copy?]
+The `transit_server.py` file is the bridge between Python and JavaScript. It must be co-located with your Python files because Python imports it directly. Do not try to import from `node_modules` — the path will not work in most setups.
+:::
 
 ### Create the Python service
 
-Create `python/service.py`:
+Create `python/service.py` (or any name you like — Transit will find it):
 
 ```python
 import json
-import sys
-import os
-
-# Add the transit Python runtime to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "transit-py-runtime"))
-
 from transit_server import TransitServer, register_function
 
+
 def process_data(args_json):
+    """Process some data and return a result.
+    
+    IMPORTANT: args_json is a JSON STRING, not a dictionary!
+    You must call json.loads() to parse it.
+    """
     args = json.loads(args_json)
     items = args.get("items", [])
     return json.dumps({
@@ -209,8 +271,11 @@ def process_data(args_json):
         "processed": True
     })
 
+
 def get_stats(args_json):
+    """Return some stats."""
     return json.dumps({"status": "healthy", "language": "python"})
+
 
 if __name__ == "__main__":
     server = TransitServer()
@@ -218,6 +283,10 @@ if __name__ == "__main__":
     register_function("getStats", get_stats)
     server.start()
 ```
+
+:::danger[Common mistake]
+Writing `def process_data(args):` and calling `args.get("items")` directly will fail because `args` is a JSON string, not a dictionary. Always use `json.loads(args)` first.
+:::
 
 ### Call from JS
 
@@ -237,7 +306,15 @@ console.log(await jv.processJob({}))
 console.log(await py.processData({ items: [1, 2, 3] }))
 ```
 
-## 5. See what Transit found
+:::tip[Custom entry point]
+If your Python file is not named `service.py`, `main.py`, `app.py`, `server.py`, `filters.py`, or `transit_service.py`, tell Transit which file to use:
+
+```js
+const py = transit.python(resolve(__dirname, "./python"), { serverScript: "filters.py" })
+```
+:::
+
+## 6. See what Transit found
 
 ```js
 transit.info()
@@ -251,6 +328,21 @@ transit.info()
 //   - processData [tier 1]
 //   - getStats [tier 1]
 ```
+
+## Dev mode vs build mode
+
+Transit has two modes:
+
+| Mode | Command | What happens |
+|------|---------|-------------|
+| **Dev mode** | `node index.js` or `transit dev` | Uses a Proxy to dynamically dispatch function calls. Great for development — no build step needed. |
+| **Build mode** | `transit build` | Generates typed TypeScript stubs and compiles native addons. Better for production — gives you type safety and faster startup. |
+
+In dev mode (the default), Transit uses a JavaScript Proxy to intercept function calls and route them to the right bridge. This means you can call functions immediately without any code generation.
+
+In build mode, Transit generates explicit TypeScript functions for each discovered function. This gives you autocomplete, type checking, and slightly faster startup.
+
+**For most projects, dev mode is fine.** Use build mode when you want type safety or are deploying to production.
 
 ## Using the CLI
 
@@ -294,9 +386,9 @@ You don't need to register functions manually. Transit scans your code and finds
 
 | Language | What Transit finds |
 |----------|-------------------|
-| **Rust** | `pub fn` functions (Tier 1) |
+| **Rust** | `#[napi] pub fn` functions (Tier 1) |
 | **Java** | `public` methods with signature `(String) -> String` (Tier 1) |
-| **Python** | Functions registered with `register_function()` (Tier 1) |
+| **Python** | Top-level `def` functions (Tier 1) |
 
 If you have multiple files with functions of the same name, use the qualified form:
 
@@ -315,9 +407,12 @@ my-project/
   rust/
     src/lib.rs          # Your Rust functions
     Cargo.toml
+    build.rs            # Required for napi-rs
   java/
     src/main/java/...   # Your Java functions
+    build/              # Compiled classes
   python/
+    transit_server.py   # Copied from Transit package
     service.py          # Your Python functions
   index.js              # Your JS entry point
   transit.config.json   # Generated by transit init
@@ -332,19 +427,42 @@ cargo build --release
 cp target/release/libtransit_scanner.so index.node
 ```
 
-**"Python transit_server.py not found"** — Make sure `transit_server.py` is in your Python directory. It's at `packages/transit-py-runtime/transit_server.py` in the Transit monorepo.
-
-**"Java class not found"** — Compile your Java code:
+:::tip[Bun users]
+If you see this error with Bun, you may need to create a symlink:
 ```bash
-javac -d build src/main/java/**/*.java
+ln -sf transit-scanner.node node_modules/@sabeeirsharrma/scanner/index.node
+```
+:::
+
+**"Python entry point not found"** — Make sure your Python file is named one of: `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, or `filters.py`. Or specify a custom entry point:
+
+```js
+const py = transit.python("./python", { serverScript: "my_file.py" })
 ```
 
-**Functions not showing up in `transit.info()`** — Check that your functions match the expected signatures. Rust needs `pub fn`, Java needs `public` methods returning `String`, Python needs `register_function()`.
+Also make sure `transit_server.py` is in the same directory:
+
+```bash
+cp node_modules/transit/packages/transit-py-runtime/transit_server.py python/
+```
+
+**"Java class not found"** — Compile your Java code and specify the classpath:
+
+```js
+const jv = transit.java("./java", {
+  classpath: resolve(__dirname, "./java/build"),
+  mainClass: "com.example.App"
+})
+```
+
+**Functions not showing up in `transit.info()`** — Check that your functions match the expected signatures. Rust needs `#[napi]` and `pub fn`, Java needs `public` methods returning `String`, Python needs top-level `def` functions.
+
+**The first Python/Java call is slow** — This is normal! The first call starts the Python/Java process. After that, all calls are fast because the process stays running.
 
 ## Next steps
 
 - [API Reference](/reference/api-reference/) — full API documentation
 - [Export Tiers](/reference/export-tiers/) — how function discovery works in detail
-- [Binary Protocol](/reference/binary-protocol/) — how JS ↔ Java/Python communication works
-- [Architecture](/reference/architecture/) — system design deep dive
+- [Binary Protocol](/reference/binary-protocol/) — how JS ↔ Java/Python communication works (advanced, for contributors)
+- [Architecture](/reference/architecture/) — system design deep dive (advanced, for contributors)
 - [Contributing](/guides/contributing/) — help improve Transit
