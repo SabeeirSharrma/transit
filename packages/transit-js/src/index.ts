@@ -69,8 +69,15 @@ try {
   // CJS-to-ESM interop: static analysis may only lift some exports as named.
   // Fall back to the .default object (full CJS module.exports) if available.
   scannerModule = imported.default ?? imported;
-} catch {
+} catch (err) {
   // Scanner not compiled — functions will be discovered via bridge fallback
+  console.error(
+    "\n[transit] ⚠ WARNING: Scanner failed to load. Function discovery is disabled.\n" +
+    "To fix, run one of:\n" +
+    "  cd packages/transit-scanner && cargo build --release && cp target/release/libtransit_scanner.so index.node\n" +
+    "  napi build --release\n" +
+    `Error: ${(err as Error).message}\n`
+  );
 }
 
 function scanDirectorySync(dir: string): Manifest {
@@ -300,6 +307,7 @@ class RustDevBridge implements RuntimeBridge {
 
   private async loadAddon(): Promise<any> {
     const candidates = [
+      join(this.addonPath, "transit-scanner.node"),
       join(this.addonPath, "index.node"),
       join(this.addonPath, "target/release"),
       join(this.addonPath, "target/debug"),
@@ -347,11 +355,20 @@ class JavaDevBridge implements RuntimeBridge {
   private started = false;
   private buildOverride?: BuildOverride;
   private maxRestarts: number;
+  private classpathOverride?: string;
+  private mainClassOverride?: string;
 
-  constructor(dir: string, buildOverride?: BuildOverride, maxRestarts: number = 3) {
+  constructor(
+    dir: string,
+    buildOverride?: BuildOverride,
+    maxRestarts: number = 3,
+    options?: { classpath?: string; mainClass?: string }
+  ) {
     this.dir = resolve(dir);
     this.buildOverride = buildOverride;
     this.maxRestarts = maxRestarts;
+    this.classpathOverride = options?.classpath;
+    this.mainClassOverride = options?.mainClass;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -374,8 +391,8 @@ class JavaDevBridge implements RuntimeBridge {
     if (this.started) return;
 
     const { JavaProcessManager } = await import("@sabeeirsharrma/java-runtime");
-    const classpath = this.findClasspath();
-    const mainClass = this.findMainClass(classpath);
+    const classpath = this.classpathOverride ?? this.findClasspath();
+    const mainClass = this.mainClassOverride ?? this.findMainClass(classpath);
 
     this.processManager = new JavaProcessManager({
       javaDir: this.dir,
@@ -435,10 +452,12 @@ class PythonDevBridge implements RuntimeBridge {
   private processManager: any = null;
   private started = false;
   private maxRestarts: number;
+  private serverScript?: string;
 
-  constructor(dir: string, maxRestarts: number = 3) {
+  constructor(dir: string, maxRestarts: number = 3, serverScript?: string) {
     this.dir = resolve(dir);
     this.maxRestarts = maxRestarts;
+    this.serverScript = serverScript;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -467,6 +486,7 @@ class PythonDevBridge implements RuntimeBridge {
     this.processManager = new PythonProcessManager({
       pythonDir: this.dir,
       maxRestarts: this.maxRestarts,
+      serverScript: this.serverScript,
     });
 
     await this.processManager.start();
@@ -536,12 +556,12 @@ class Transit {
     return handle;
   }
 
-  java(dir: string): FunctionProxy {
+  java(dir: string, options?: { classpath?: string; mainClass?: string }): FunctionProxy {
     const key = `java:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
     const buildOverride = this._config.build?.java;
-    const bridge = new JavaDevBridge(dir, buildOverride, this._config.maxRestarts);
+    const bridge = new JavaDevBridge(dir, buildOverride, this._config.maxRestarts, options);
     // Scan Java source files for public methods
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
@@ -556,11 +576,11 @@ class Transit {
     return handle;
   }
 
-  python(dir: string): FunctionProxy {
+  python(dir: string, options?: { serverScript?: string }): FunctionProxy {
     const key = `python:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new PythonDevBridge(dir, this._config.maxRestarts);
+    const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript);
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);

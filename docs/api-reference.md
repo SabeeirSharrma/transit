@@ -41,7 +41,7 @@ console.log(await rs.greet("World"));  // Calls the greet function in Rust
 
 ---
 
-### `transit.java(directory)`
+### `transit.java(directory, options?)`
 
 Tells Transit to look for Java functions in the given folder.
 
@@ -55,20 +55,30 @@ const jv = transit.java("./java/src/main/java");
 3. On first function call, starts a Java process in the background
 4. Returns an object you can use to call those functions
 
+**Options:**
+- `classpath` (string): Path to compiled Java classes. Transit auto-detects this by looking for `build/`, `out/`, or `target/` directories, but you can specify it explicitly.
+- `mainClass` (string): Fully qualified main class name. Default: `transit.java.TransitService`.
+
 **You need:**
 - The folder must contain Java source files
 - The Java code must be compiled (`javac`)
 - Java JDK 21+ must be installed
 
-**Example:**
+**Examples:**
 ```js
+// Auto-detect classpath
 const jv = transit.java("./java/src/main/java");
-console.log(await jv.processJob({}));  // Calls processJob in Java
+
+// Explicit classpath and main class
+const jv = transit.java("./java", {
+  classpath: "./java/build",
+  mainClass: "com.example.App"
+});
 ```
 
 ---
 
-### `transit.python(directory)`
+### `transit.python(directory, options?)`
 
 Tells Transit to look for Python functions in the given folder.
 
@@ -82,16 +92,24 @@ const py = transit.python("./python");
 3. On first function call, starts a Python process in the background
 4. Returns an object you can use to call those functions
 
+**Options:**
+- `serverScript` (string): Custom entry point filename. Transit auto-detects `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, and `filters.py`. Use this if your file has a different name.
+
 **You need:**
 - The folder must contain Python files
-- The file must be named `transit_service.py` (or `service.py`, `main.py`, `app.py`)
+- The file must be named one of: `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, or `filters.py` (or specify `serverScript`)
 - The file must import and use `transit_server.py` (see getting-started guide)
 - Python 3.10+ must be installed
 
-**Example:**
+**Important:** Your Python functions receive a JSON **string**, not a dictionary. Always use `json.loads(args)` to parse it.
+
+**Examples:**
 ```js
+// Auto-detect entry point
 const py = transit.python("./python");
-console.log(await py.processData({ items: [1, 2, 3] }));  // Calls processData in Python
+
+// Custom entry point
+const py = transit.python("./python", { serverScript: "filters.py" });
 ```
 
 ---

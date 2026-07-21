@@ -98,8 +98,11 @@ export class PythonProcessManager {
     const scriptPath = this.findServerScript();
     if (!scriptPath) {
       throw new Error(
-        `Python transit_server.py not found in ${pythonDir}\n` +
-        `Ensure transit_server.py is in the directory or set serverScript option`
+        `Python entry point not found in ${pythonDir}\n` +
+        `Looked for: transit_service.py, service.py, main.py, app.py, server.py, filters.py\n` +
+        `To use a custom entry point, set serverScript option:\n` +
+        `  transit.python("./py", { serverScript: "my_entry.py" })\n` +
+        `Or ensure one of the above files exists in ${pythonDir}`
       );
     }
 
@@ -155,6 +158,8 @@ export class PythonProcessManager {
       "service.py",
       "main.py",
       "app.py",
+      "server.py",
+      "filters.py",
     ];
 
     for (const candidate of candidates) {

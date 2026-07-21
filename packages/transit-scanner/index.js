@@ -12,11 +12,17 @@ function loadNativeAddon() {
   if (nativeAddon) return nativeAddon;
 
   const candidates = [
+    // napi-rs default output names
+    join(__dirname, "transit-scanner.node"),
     join(__dirname, "index.node"),
+    // Cargo build output (release)
     join(__dirname, "target/release/libtransit_scanner.node"),
     join(__dirname, "target/release/libtransit_scanner.so"),
+    // Cargo build output (debug)
     join(__dirname, "target/debug/libtransit_scanner.node"),
     join(__dirname, "target/debug/libtransit_scanner.so"),
+    // Bun cache symlink workaround
+    join(__dirname, "transit_scanner.node"),
   ];
 
   for (const candidate of candidates) {
@@ -36,7 +42,13 @@ function loadNativeAddon() {
   }
 
   throw new Error(
-    "@sabeeirsharrma/scanner: native addon not built. Run 'cargo build --release' in packages/transit-scanner/"
+    "@sabeeirsharrma/scanner: native addon not built.\n" +
+    "To fix, run one of:\n" +
+    "  cd packages/transit-scanner && cargo build --release\n" +
+    "  cp target/release/libtransit_scanner.so index.node\n" +
+    "Or if using napi-rs:\n" +
+    "  napi build --release\n" +
+    "Then ensure the .node file is in the scanner package directory."
   );
 }
 

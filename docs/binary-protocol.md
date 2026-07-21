@@ -1,4 +1,6 @@
-# Binary Protocol (Advanced)
+# Binary Protocol (Advanced / Contributors)
+
+> **This document is for advanced users and contributors.** Most users do not need to read this — Transit handles all communication automatically. If you are just getting started, see [Getting Started](getting-started.md) instead.
 
 This page describes the wire format Transit uses to communicate between JavaScript and Java/Python. You do not need to read this to use Transit — it is for contributors and advanced users who want to understand how the communication works.
 
