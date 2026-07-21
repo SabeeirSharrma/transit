@@ -10,15 +10,15 @@
     },
     "cli/transit-cli": {
       "name": "transit-cli",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "bin": {
         "transit": "dist/index.js",
       },
       "dependencies": {
-        "@sabeeirsharrma/codegen": "workspace:*",
-        "@sabeeirsharrma/scanner": "workspace:*",
-        "@sabeeirsharrma/schema": "workspace:*",
-        "transit": "workspace:*",
+        "@sabeeirsharrma/codegen": "^2.0.0",
+        "@sabeeirsharrma/scanner": "^2.0.0",
+        "@sabeeirsharrma/schema": "^2.0.0",
+        "@sabeeirsharrma/transit": "^2.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -27,16 +27,16 @@
     },
     "examples/js-rust-java-demo": {
       "name": "js-rust-java-demo",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "dependencies": {
-        "transit": "workspace:*",
+        "@sabeeirsharrma/transit": "workspace:*",
       },
     },
     "packages/transit-codegen": {
       "name": "@sabeeirsharrma/codegen",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "dependencies": {
-        "@sabeeirsharrma/schema": "workspace:*",
+        "@sabeeirsharrma/schema": "^2.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -45,9 +45,9 @@
     },
     "packages/transit-java-runtime-js": {
       "name": "@sabeeirsharrma/java-runtime",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "dependencies": {
-        "@sabeeirsharrma/schema": "workspace:*",
+        "@sabeeirsharrma/schema": "^2.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -55,13 +55,13 @@
       },
     },
     "packages/transit-js": {
-      "name": "transit",
-      "version": "0.1.0",
+      "name": "@sabeeirsharrma/transit",
+      "version": "2.0.0",
       "dependencies": {
-        "@sabeeirsharrma/java-runtime": "workspace:*",
-        "@sabeeirsharrma/python-runtime": "workspace:*",
-        "@sabeeirsharrma/scanner": "workspace:*",
-        "@sabeeirsharrma/schema": "workspace:*",
+        "@sabeeirsharrma/java-runtime": "^2.0.0",
+        "@sabeeirsharrma/python-runtime": "^2.0.0",
+        "@sabeeirsharrma/scanner": "^2.0.0",
+        "@sabeeirsharrma/schema": "^2.0.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -70,11 +70,11 @@
     },
     "packages/transit-py-runtime": {
       "name": "@sabeeirsharrma/py-runtime",
-      "version": "0.1.0",
+      "version": "2.0.0",
     },
     "packages/transit-python-runtime-js": {
       "name": "@sabeeirsharrma/python-runtime",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "typescript": "^5.4.0",
@@ -82,14 +82,14 @@
     },
     "packages/transit-scanner": {
       "name": "@sabeeirsharrma/scanner",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@napi-rs/cli": "^3.0.0",
       },
     },
     "packages/transit-schema": {
       "name": "@sabeeirsharrma/schema",
-      "version": "0.1.0",
+      "version": "2.0.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "typescript": "^5.7.0",
@@ -321,6 +321,8 @@
 
     "@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@workspace:packages/transit-schema"],
 
+    "@sabeeirsharrma/transit": ["@sabeeirsharrma/transit@workspace:packages/transit-js"],
+
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg=="],
 
     "@types/node": ["@types/node@22.20.1", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q=="],
@@ -494,8 +496,6 @@
     "term-size": ["term-size@2.2.1", "", {}, "sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg=="],
 
     "to-regex-range": ["to-regex-range@5.0.1", "", { "dependencies": { "is-number": "^7.0.0" } }, "sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ=="],
-
-    "transit": ["transit@workspace:packages/transit-js"],
 
     "transit-cli": ["transit-cli@workspace:cli/transit-cli"],
 

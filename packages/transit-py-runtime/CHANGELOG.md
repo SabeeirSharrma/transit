@@ -1,5 +1,11 @@
 # @sabeeirsharrma/py-runtime
 
+## 2.0.1
+
+### Patch Changes
+
+- depend on @sabeeirsharrma/transit for the ACTUAL framework instead of a package with the same name
+
 ## 2.0.0
 
 ### Major Changes

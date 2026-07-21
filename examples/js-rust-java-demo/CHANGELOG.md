@@ -1,5 +1,13 @@
 # js-rust-java-demo
 
+## 2.0.1
+
+### Patch Changes
+
+- depend on @sabeeirsharrma/transit for the ACTUAL framework instead of a package with the same name
+- Updated dependencies
+  - @sabeeirsharrma/transit@2.0.1
+
 ## 2.0.0
 
 ### Major Changes
