@@ -46,7 +46,7 @@ async function loadScanner(): Promise<boolean> {
   } catch {
     // Try loading through the transit package
     try {
-      const transit = await import("transit");
+      const transit = await import("@sabeeirsharrma/transit");
       // Access the scanner functions from the transit package
       scannerModule = transit;
       return true;

@@ -1,5 +1,5 @@
 {
-  "name": "transit",
+  "name": "@sabeeirsharrma/transit",
   "version": "2.0.0",
   "description": "Languages that just talk to each other. No API. No middleman.",
   "type": "module",

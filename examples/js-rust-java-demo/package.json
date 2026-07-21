@@ -8,6 +8,6 @@
     "build:rust": "cd rust && cargo build --release"
   },
   "dependencies": {
-    "transit": "workspace:*"
+    "@sabeeirsharrma/transit": "workspace:*"
   }
 }

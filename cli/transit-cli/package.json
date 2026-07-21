@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "transit": "^2.0.0",
+    "@sabeeirsharrma/transit": "^2.0.0",
     "@sabeeirsharrma/schema": "^2.0.0",
     "@sabeeirsharrma/scanner": "^2.0.0",
     "@sabeeirsharrma/codegen": "^2.0.0"

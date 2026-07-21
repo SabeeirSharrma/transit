@@ -53,7 +53,7 @@ export function generateTypeScript(
 
   // Imports
   if (generateImports) {
-    lines.push('import { transit } from "transit";');
+    lines.push('import { transit } from "@sabeeirsharrma/transit";');
     lines.push("");
   }
 

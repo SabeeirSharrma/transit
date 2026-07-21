@@ -7,7 +7,7 @@
  * This demonstrates the developer-facing API from Spec Section 9.
  */
 
-import { transit } from "transit";
+import { transit } from "@sabeeirsharrma/transit";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
