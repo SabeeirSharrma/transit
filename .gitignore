@@ -1,0 +1,8 @@
+fastapi/.venv/
+transit/rust/target/
+transit/rust/index.node
+transit/java/build/
+node_modules/
+results/*.json
+__pycache__/
+*.pyc
