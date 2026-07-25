@@ -440,21 +440,29 @@ async function main() {
   fastapiProc.kill();
   javaProc?.kill();
 
-  // Print summary
-  printSummary(results);
+  // Print summary and save log
+  const logText = printSummary(results);
+  const logPath = resolve(RESULTS_DIR, "benchmark.log");
+  fs.writeFileSync(logPath, logText);
+  console.log(`\n✓ Log saved to ${logPath}`);
 }
 
 function printSummary(results) {
-  console.log("\n╔══════════════════════════════════════════════════════════════╗");
-  console.log("║                    BENCHMARK SUMMARY                        ║");
-  console.log("╚══════════════════════════════════════════════════════════════╝\n");
+  const lines = [];
+  const out = (s) => { lines.push(s); console.log(s); };
+
+  out("");
+  out("╔══════════════════════════════════════════════════════════════╗");
+  out("║                    BENCHMARK SUMMARY                        ║");
+  out("╚══════════════════════════════════════════════════════════════╝");
+  out("");
 
   const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java"];
   const rows = [];
 
   for (const [key, data] of Object.entries(results.benchmarks)) {
     const row = [data.name];
-    row.push(`${data.fastjson?.mean.toFixed(2)}ms`);
+    row.push(`${data.fastapi?.mean.toFixed(2)}ms`);
     row.push(`${data.transit?.rust?.mean.toFixed(2)}ms`);
     row.push(`${data.transit?.python?.mean.toFixed(2)}ms`);
     row.push(data.transit?.java ? `${data.transit?.java?.mean.toFixed(2)}ms` : "N/A");
@@ -468,16 +476,17 @@ function printSummary(results) {
 
   // Print table
   const sep = widths.map(w => "─".repeat(w + 2)).join("┼");
-  console.log(headers.map((h, i) => h.padEnd(widths[i])).join(" │ "));
-  console.log(sep);
+  out(headers.map((h, i) => h.padEnd(widths[i])).join(" │ "));
+  out(sep);
   for (const row of rows) {
-    console.log(row.map((c, i) => c.padEnd(widths[i])).join(" │ "));
+    out(row.map((c, i) => c.padEnd(widths[i])).join(" │ "));
   }
 
   // Winner summary
-  console.log("\n─── Winners (lower is better) ───────────────────────────────────");
+  out("");
+  out("─── Winners (lower is better) ───────────────────────────────────");
   for (const [key, data] of Object.entries(results.benchmarks)) {
-    const fastapiTime = data.fastjson?.mean || Infinity;
+    const fastapiTime = data.fastapi?.mean || Infinity;
     const rustTime = data.transit?.rust?.mean || Infinity;
     const pyTime = data.transit?.python?.mean || Infinity;
     const javaTime = data.transit?.java?.mean || Infinity;
@@ -492,8 +501,10 @@ function printSummary(results) {
       ? `${(fastapiTime / Math.min(rustTime, pyTime, javaTime)).toFixed(1)}x faster than Transit`
       : `${(fastapiTime / fastest).toFixed(1)}x faster than FastAPI`;
 
-    console.log(`  ${data.name}: ${winner} (${speedup})`);
+    out(`  ${data.name}: ${winner} (${speedup})`);
   }
+
+  return lines.join("\n");
 }
 
 main().catch(console.error);
