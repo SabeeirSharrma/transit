@@ -62,7 +62,7 @@ Results are saved to two files in `results/`:
 
 - **`benchmark.log`** — human-readable summary table with mean latency per operation and a winner breakdown. This file is overwritten on each run.
 
-## Results
+## Results (latest)
 
 ### Serial (single request)
 
