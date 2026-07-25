@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1209" height="534" viewBox="0 0 1209 534">
+
+<style>
+  .bg { fill: #ffffff; }
+  .border { stroke: #d0d7de; fill: none; }
+  .title { fill: #1f2328; }
+  .specs { fill: #57606a; }
+  .divider { stroke: #d0d7de; }
+  .hdr-bg { fill: #f6f8fa; }
+  .hdr-text { fill: #1f2328; font-weight: 600; }
+  .row-even { fill: #ffffff; }
+  .row-odd { fill: #f6f8fa; }
+  .cell-text { fill: #1f2328; }
+  text { font-family: JetBrains Mono, ui-monospace, Menlo, monospace; }
+
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #0d1117; }
+    .border { stroke: #30363d; }
+    .title { fill: #e6edf3; }
+    .specs { fill: #8b949e; }
+    .divider { stroke: #30363d; }
+    .hdr-bg { fill: #161b22; }
+    .hdr-text { fill: #e6edf3; }
+    .row-even { fill: #0d1117; }
+    .row-odd { fill: #161b22; }
+    .cell-text { fill: #e6edf3; }
+  }
+</style>
+
+<rect class="bg" x="0.5" y="0.5" width="1208" height="533" rx="10" ry="10"/>
+<rect class="border" x="0.5" y="0.5" width="1208" height="533" rx="10" ry="10"/>
+<text class="title" x="18" y="35" font-size="16" font-weight="700">Transit VS Fast API Benchmark</text>
+<text class="specs" x="18" y="58" font-size="11">AMD Ryzen 7 4800H (16) @ 2.90GHz  ·  GTX 1650 Ti Mobile (Discrete) + Radeon Vega (Integrated)  ·  32GB DDR4 @ 3200MHz SODIMM  ·  Linux 7.0.14-arch1-1</text>
+<line class="divider" x1="18" y1="69" x2="1191" y2="69"/>
+<text class="hdr-text" x="18" y="89" font-size="12" font-weight="700">Serial (single request)</text>
+<rect class="hdr-bg" x="18" y="96" width="673" height="24"/>
+<text class="hdr-text" x="32" y="112" font-size="12" text-anchor="start">Operation</text>
+<text class="hdr-text" x="264" y="112" font-size="12" text-anchor="start">FastAPI</text>
+<text class="hdr-text" x="344" y="112" font-size="12" text-anchor="start">Transit/Rust</text>
+<text class="hdr-text" x="459" y="112" font-size="12" text-anchor="start">Transit/Python</text>
+<text class="hdr-text" x="589" y="112" font-size="12" text-anchor="start">Transit/Java</text>
+<rect class="row-even" x="18" y="120" width="673" height="24"/>
+<text class="cell-text" x="32" y="136" font-size="12" text-anchor="start">ETL Pipeline (1000 rows)</text>
+<text class="cell-text" x="264" y="136" font-size="12" text-anchor="start">2.01ms</text>
+<text class="cell-text" x="344" y="136" font-size="12" text-anchor="start">0.30ms</text>
+<text class="cell-text" x="459" y="136" font-size="12" text-anchor="start">1.22ms</text>
+<text class="cell-text" x="589" y="136" font-size="12" text-anchor="start">0.31ms</text>
+<rect class="row-odd" x="18" y="144" width="673" height="24"/>
+<text class="cell-text" x="32" y="160" font-size="12" text-anchor="start">Text Analysis (5000 words)</text>
+<text class="cell-text" x="264" y="160" font-size="12" text-anchor="start">16.37ms</text>
+<text class="cell-text" x="344" y="160" font-size="12" text-anchor="start">0.75ms</text>
+<text class="cell-text" x="459" y="160" font-size="12" text-anchor="start">15.82ms</text>
+<text class="cell-text" x="589" y="160" font-size="12" text-anchor="start">0.64ms</text>
+<rect class="row-even" x="18" y="168" width="673" height="24"/>
+<text class="cell-text" x="32" y="184" font-size="12" text-anchor="start">Matrix Multiply (50x50)</text>
+<text class="cell-text" x="264" y="184" font-size="12" text-anchor="start">26.30ms</text>
+<text class="cell-text" x="344" y="184" font-size="12" text-anchor="start">1.00ms</text>
+<text class="cell-text" x="459" y="184" font-size="12" text-anchor="start">20.19ms</text>
+<text class="cell-text" x="589" y="184" font-size="12" text-anchor="start">1.20ms</text>
+<rect class="row-odd" x="18" y="192" width="673" height="24"/>
+<text class="cell-text" x="32" y="208" font-size="12" text-anchor="start">Matrix Determinant (8x8)</text>
+<text class="cell-text" x="264" y="208" font-size="12" text-anchor="start">24.12ms</text>
+<text class="cell-text" x="344" y="208" font-size="12" text-anchor="start">0.08ms</text>
+<text class="cell-text" x="459" y="208" font-size="12" text-anchor="start">23.81ms</text>
+<text class="cell-text" x="589" y="208" font-size="12" text-anchor="start">0.19ms</text>
+<rect class="row-even" x="18" y="216" width="673" height="24"/>
+<text class="cell-text" x="32" y="232" font-size="12" text-anchor="start">Graph Processing (500 nodes)</text>
+<text class="cell-text" x="264" y="232" font-size="12" text-anchor="start">11.36ms</text>
+<text class="cell-text" x="344" y="232" font-size="12" text-anchor="start">0.23ms</text>
+<text class="cell-text" x="459" y="232" font-size="12" text-anchor="start">7.25ms</text>
+<text class="cell-text" x="589" y="232" font-size="12" text-anchor="start">0.46ms</text>
+<rect class="row-odd" x="18" y="240" width="673" height="24"/>
+<text class="cell-text" x="32" y="256" font-size="12" text-anchor="start">Fibonacci Memo (n=38)</text>
+<text class="cell-text" x="264" y="256" font-size="12" text-anchor="start">0.68ms</text>
+<text class="cell-text" x="344" y="256" font-size="12" text-anchor="start">0.02ms</text>
+<text class="cell-text" x="459" y="256" font-size="12" text-anchor="start">0.21ms</text>
+<text class="cell-text" x="589" y="256" font-size="12" text-anchor="start">0.12ms</text>
+<rect class="row-even" x="18" y="264" width="673" height="24"/>
+<text class="cell-text" x="32" y="280" font-size="12" text-anchor="start">SHA-256 Hashing (10K rounds)</text>
+<text class="cell-text" x="264" y="280" font-size="12" text-anchor="start">5.45ms</text>
+<text class="cell-text" x="344" y="280" font-size="12" text-anchor="start">0.06ms</text>
+<text class="cell-text" x="459" y="280" font-size="12" text-anchor="start">4.53ms</text>
+<text class="cell-text" x="589" y="280" font-size="12" text-anchor="start">0.19ms</text>
+<text class="hdr-text" x="18" y="317" font-size="12" font-weight="700">Concurrent (10 parallel requests)</text>
+<rect class="hdr-bg" x="18" y="324" width="680" height="24"/>
+<text class="hdr-text" x="32" y="340" font-size="12" text-anchor="start">Operation</text>
+<text class="hdr-text" x="264" y="340" font-size="12" text-anchor="start">FastAPI</text>
+<text class="hdr-text" x="351" y="340" font-size="12" text-anchor="start">Transit/Rust</text>
+<text class="hdr-text" x="466" y="340" font-size="12" text-anchor="start">Transit/Python</text>
+<text class="hdr-text" x="597" y="340" font-size="12" text-anchor="start">Transit/Java</text>
+<rect class="row-even" x="18" y="348" width="680" height="24"/>
+<text class="cell-text" x="32" y="364" font-size="12" text-anchor="start">ETL Pipeline (1000 rows)</text>
+<text class="cell-text" x="264" y="364" font-size="12" text-anchor="start">11.48ms</text>
+<text class="cell-text" x="351" y="364" font-size="12" text-anchor="start">1.73ms</text>
+<text class="cell-text" x="466" y="364" font-size="12" text-anchor="start">2.50ms</text>
+<text class="cell-text" x="597" y="364" font-size="12" text-anchor="start">1.98ms</text>
+<rect class="row-odd" x="18" y="372" width="680" height="24"/>
+<text class="cell-text" x="32" y="388" font-size="12" text-anchor="start">Text Analysis (5000 words)</text>
+<text class="cell-text" x="264" y="388" font-size="12" text-anchor="start">142.27ms</text>
+<text class="cell-text" x="351" y="388" font-size="12" text-anchor="start">3.96ms</text>
+<text class="cell-text" x="466" y="388" font-size="12" text-anchor="start">79.38ms</text>
+<text class="cell-text" x="597" y="388" font-size="12" text-anchor="start">3.97ms</text>
+<rect class="row-even" x="18" y="396" width="680" height="24"/>
+<text class="cell-text" x="32" y="412" font-size="12" text-anchor="start">Matrix Multiply (50x50)</text>
+<text class="cell-text" x="264" y="412" font-size="12" text-anchor="start">239.48ms</text>
+<text class="cell-text" x="351" y="412" font-size="12" text-anchor="start">6.38ms</text>
+<text class="cell-text" x="466" y="412" font-size="12" text-anchor="start">87.32ms</text>
+<text class="cell-text" x="597" y="412" font-size="12" text-anchor="start">6.74ms</text>
+<rect class="row-odd" x="18" y="420" width="680" height="24"/>
+<text class="cell-text" x="32" y="436" font-size="12" text-anchor="start">Matrix Determinant (8x8)</text>
+<text class="cell-text" x="264" y="436" font-size="12" text-anchor="start">218.68ms</text>
+<text class="cell-text" x="351" y="436" font-size="12" text-anchor="start">0.50ms</text>
+<text class="cell-text" x="466" y="436" font-size="12" text-anchor="start">123.47ms</text>
+<text class="cell-text" x="597" y="436" font-size="12" text-anchor="start">0.74ms</text>
+<rect class="row-even" x="18" y="444" width="680" height="24"/>
+<text class="cell-text" x="32" y="460" font-size="12" text-anchor="start">Graph Processing (500 nodes)</text>
+<text class="cell-text" x="264" y="460" font-size="12" text-anchor="start">81.51ms</text>
+<text class="cell-text" x="351" y="460" font-size="12" text-anchor="start">0.95ms</text>
+<text class="cell-text" x="466" y="460" font-size="12" text-anchor="start">32.37ms</text>
+<text class="cell-text" x="597" y="460" font-size="12" text-anchor="start">1.60ms</text>
+<rect class="row-odd" x="18" y="468" width="680" height="24"/>
+<text class="cell-text" x="32" y="484" font-size="12" text-anchor="start">Fibonacci Memo (n=38)</text>
+<text class="cell-text" x="264" y="484" font-size="12" text-anchor="start">3.67ms</text>
+<text class="cell-text" x="351" y="484" font-size="12" text-anchor="start">0.12ms</text>
+<text class="cell-text" x="466" y="484" font-size="12" text-anchor="start">0.30ms</text>
+<text class="cell-text" x="597" y="484" font-size="12" text-anchor="start">0.63ms</text>
+<rect class="row-even" x="18" y="492" width="680" height="24"/>
+<text class="cell-text" x="32" y="508" font-size="12" text-anchor="start">SHA-256 Hashing (10K rounds)</text>
+<text class="cell-text" x="264" y="508" font-size="12" text-anchor="start">42.83ms</text>
+<text class="cell-text" x="351" y="508" font-size="12" text-anchor="start">0.11ms</text>
+<text class="cell-text" x="466" y="508" font-size="12" text-anchor="start">23.60ms</text>
+<text class="cell-text" x="597" y="508" font-size="12" text-anchor="start">1.61ms</text>
+</svg>

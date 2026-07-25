@@ -138,11 +138,10 @@ PRs are reviewed within 1-2 days. Once approved, the branch is merged and closed
 
 ## Known Issues
 
-Here are some things that need work:
+Here are some things that still need work:
 
-- The scanner's `index.js` does not check for `transit-scanner.node` (only `index.node`)
-- Error messages when the scanner fails to load are too quiet
-- Python entry point detection is limited to specific filenames
-- The getting-started guide assumes a monorepo layout
+- The `transit.config.schema.json` format is not yet defined
+- `transit init` doesn't auto-insert Python import statements
+- `transit start` entry point currently requires ESM support
 
-See [feedback.md](feedback.md) for a full list of issues found during integration.
+See [feedback.md](feedback.md) for the full list of issues found during integration.

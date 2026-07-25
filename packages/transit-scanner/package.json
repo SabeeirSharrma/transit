@@ -24,5 +24,6 @@
   "optionalDependencies": {},
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "license": "MIT"
 }
