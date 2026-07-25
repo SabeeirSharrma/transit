@@ -5,6 +5,7 @@ A comprehensive benchmark comparing **Transit** (binary protocol, multi-language
 ## Why This Benchmark?
 
 When building multi-language systems, you have two main choices:
+
 1. **Transit**: Call functions across language boundaries as if they were local async functions, using a binary protocol
 2. **FastAPI + JSON**: Standard REST API with HTTP requests and JSON serialization
 
@@ -23,6 +24,7 @@ This benchmark measures the real-world tradeoffs across multiple dimensions.
 | **SHA-256 Hashing** | 10K rounds of SHA-256 | Crypto/compute |
 
 Each operation runs:
+
 - **Serial**: 100 iterations with 10 warmup
 - **Concurrent**: 10 parallel requests
 
@@ -36,6 +38,7 @@ Each operation runs:
 ## Setup
 
 ### Prerequisites
+
 - Node.js >= 20
 - Rust toolchain
 - Java JDK 21+
@@ -43,6 +46,7 @@ Each operation runs:
 - npm
 
 ### Install
+
 ```bash
 cd benchmark
 npm install
@@ -50,6 +54,7 @@ npm run setup
 ```
 
 ### Run
+
 ```bash
 npm run benchmark
 ```
@@ -63,6 +68,18 @@ Results are saved to two files in `results/`:
 - **`benchmark.log`** — human-readable summary table with mean latency per operation and a winner breakdown. This file is overwritten on each run.
 
 ## Results (latest)
+
+RESULTS MAY VARY DEPENDING ON HARDWARE AND OS
+
+### Tested On
+
+- Kernel: Linux 7.0.14-arch1-1
+- OS: EndeavourOS
+- DE: Cinnamon 6.6.8
+- CPU: AMD Ryzen 7 4800H (16) @ 2.90 GHz
+- GPU 1: NVIDIA GeForce GTX 1650 Ti Mobile [Discrete]
+- GPU 2: AMD Radeon Vega Series / Radeon Vega Mobile Series [Integrated]
+- MEM: 32GB DDR4 @ 3200MHz SODIMM
 
 ### Serial (single request)
 
