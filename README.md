@@ -31,6 +31,8 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 
 ![Benchmarks](benchamrks.svg)
 
+![Benchmarks](benchmarks2.svg)
+
 ## Quick Start
 
 ### 1. Install
