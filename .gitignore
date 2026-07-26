@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 **.log
 .transit-cache.json
+chat-server-benchmark/results/benchmark-1785042997758.json
+chat-server-benchmark/results/benchmark-1785043285371.json
+chat-server-benchmark/transit/rust/index.node
+**-lock

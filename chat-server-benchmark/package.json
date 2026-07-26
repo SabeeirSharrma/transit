@@ -1,0 +1,16 @@
+{
+  "name": "chat-server-transit-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sabeeirsharrma/transit": "^2.0.1"
+  },
+  "scripts": {
+    "benchmark": "node run-benchmark.js",
+    "build:rust": "cd transit/rust && cargo build --release && cp target/release/libchat_benchmark_rust.so index.node",
+    "build:java": "mkdir -p transit/java/build && javac -d transit/java/build transit/java/src/main/java/chatservice/ChatService.java",
+    "install:fastapi": "cd fastapi && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "setup": "npm run build:rust && npm run build:java && npm run install:fastapi"
+  }
+}
