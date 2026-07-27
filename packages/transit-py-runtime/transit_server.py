@@ -1,8 +1,9 @@
 """
 transit-py-runtime — Python resident-process server for Transit.
 
-Listens on a local TCP port (127.0.0.1 only) and dispatches
-function calls from JS via a compact binary protocol.
+Listens on a Unix domain socket (Linux/macOS) or local TCP port
+(127.0.0.1 only, Windows) and dispatches function calls from JS
+via a compact binary protocol.
 
 Protocol (v0.1, little-endian):
   Header:  [version:1][type:1][request_id:4][payload_len:4]
@@ -11,15 +12,57 @@ Protocol (v0.1, little-endian):
   HEALTH_PING payload:   empty
   HEALTH_PONG payload:   empty
 
+Transport auto-detection:
+  - Linux/macOS: AF_UNIX at /tmp/transit-<pid>.sock (2-3x less latency)
+  - Windows:     AF_INET on 127.0.0.1 (TCP loopback fallback)
+  - Override:    Set TRANSIT_TRANSPORT=tcp to force TCP on any OS
+
 Zero external dependencies — uses only socket, struct, json, threading from stdlib.
+Optional: orjson for 2-10x faster JSON (set TRANSIT_USE_ORJSON=1).
 """
 
-import json
+import atexit
+import os
 import socket
 import struct
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+# ─── orjson injection (opt-in via TRANSIT_USE_ORJSON=1) ────────────────────────
+# Must happen BEFORE `import json` so user code that does `import json`
+# transparently picks up orjson's faster implementation.
+
+_using_orjson = False
+
+if os.environ.get("TRANSIT_USE_ORJSON", "").strip() == "1":
+    try:
+        import orjson as _orjson
+        import types
+
+        # orjson.dumps() returns bytes, but stdlib json.dumps() returns str.
+        # Create a compatibility shim so existing code doesn't break.
+        _json_shim = types.ModuleType("json")
+        _json_shim.loads = _orjson.loads  # type: ignore[attr-defined]
+
+        def _dumps_compat(obj, **kwargs):
+            """orjson.dumps wrapper that returns str (like stdlib json.dumps)."""
+            return _orjson.dumps(obj).decode("utf-8")
+
+        _json_shim.dumps = _dumps_compat  # type: ignore[attr-defined]
+
+        # Inject into sys.modules so `import json` picks up the shim
+        sys.modules["json"] = _json_shim
+        _using_orjson = True
+        print("[transit-py] orjson injected (2-10x faster JSON)", file=sys.stderr)
+    except ImportError:
+        print(
+            "[transit-py] WARNING: TRANSIT_USE_ORJSON=1 but orjson is not installed. "
+            "Falling back to stdlib json. Install with: pip install orjson",
+            file=sys.stderr,
+        )
+
+import json
 
 # ─── Protocol constants ───────────────────────────────────────────────────────
 
@@ -55,22 +98,75 @@ def register_function(name, fn):
 # ─── Server ───────────────────────────────────────────────────────────────────
 
 class TransitServer:
-    """TCP server that dispatches function calls from JS."""
+    """IPC server that dispatches function calls from JS.
+
+    Uses Unix domain sockets on Linux/macOS for lower latency,
+    falls back to TCP loopback on Windows.
+    """
 
     def __init__(self):
         self._server_socket = None
         self._port = -1
+        self._socket_path = None  # set when using UDS
         self._running = False
-        self._executor = ThreadPoolExecutor(max_workers=32)
+        self._executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
         self._lock = threading.Lock()
 
     @property
     def port(self):
         return self._port
 
+    @property
+    def socket_path(self):
+        return self._socket_path
+
+    def _use_uds(self):
+        """Determine whether to use Unix domain sockets."""
+        # Env override: TRANSIT_TRANSPORT=tcp forces TCP loopback
+        if os.environ.get("TRANSIT_TRANSPORT", "").lower() == "tcp":
+            return False
+        # AF_UNIX not available on Windows (before 3.12+ with limited support)
+        return hasattr(socket, "AF_UNIX") and os.name != "nt"
+
     def start(self):
-        """Start the server on an ephemeral port (127.0.0.1 only)."""
-        # Bind to loopback only — never exposed to the network
+        """Start the server.
+
+        On Linux/macOS: binds to /tmp/transit-<pid>.sock (AF_UNIX).
+        On Windows: binds to 127.0.0.1:<ephemeral> (AF_INET TCP loopback).
+        """
+        if self._use_uds():
+            self._start_uds()
+        else:
+            self._start_tcp()
+
+    def _start_uds(self):
+        """Start the server on a Unix domain socket."""
+        self._socket_path = f"/tmp/transit-{os.getpid()}.sock"
+
+        # Clean up stale socket file from a previous crash
+        if os.path.exists(self._socket_path):
+            os.unlink(self._socket_path)
+
+        self._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._server_socket.bind(self._socket_path)
+        self._server_socket.listen(50)
+        self._running = True
+
+        # Register crash cleanup
+        atexit.register(self._cleanup_socket_file)
+
+        print(f"[transit-py] Server listening on UDS {self._socket_path}", file=sys.stderr)
+        print(f"[transit-py] Registered {len(_functions)} functions", file=sys.stderr)
+
+        # Signal readiness: SOCKET=<path> so the parent process can read it
+        print(f"SOCKET={self._socket_path}")
+        sys.stdout.flush()
+
+        # Accept connections in a loop
+        self._accept_loop()
+
+    def _start_tcp(self):
+        """Start the server on a TCP loopback port."""
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(("127.0.0.1", 0))
@@ -86,11 +182,15 @@ class TransitServer:
         sys.stdout.flush()
 
         # Accept connections in a loop
+        self._accept_loop()
+
+    def _accept_loop(self):
+        """Accept connections in a loop (shared by UDS and TCP)."""
         while self._running:
             try:
                 client, addr = self._server_socket.accept()
-                # Only allow loopback connections
-                if addr[0] != "127.0.0.1":
+                # For TCP, only allow loopback connections
+                if self._socket_path is None and addr and addr[0] != "127.0.0.1":
                     client.close()
                     continue
                 self._executor.submit(self._handle_client, client)
@@ -106,13 +206,33 @@ class TransitServer:
                 self._server_socket.close()
             except OSError:
                 pass
+        self._cleanup_socket_file()
         self._executor.shutdown(wait=False)
         print("[transit-py] Server stopped", file=sys.stderr)
 
+    def _cleanup_socket_file(self):
+        """Remove the UDS socket file if it exists."""
+        if self._socket_path and os.path.exists(self._socket_path):
+            try:
+                os.unlink(self._socket_path)
+            except OSError:
+                pass
+
     def _handle_client(self, client):
-        """Handle a single client connection."""
+        """Handle a single client connection.
+
+        Reads requests sequentially but dispatches CALL_REQUESTs to the
+        thread pool for concurrent execution (request pipelining). A
+        per-client write lock prevents interleaved response writes.
+        """
         try:
-            client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # TCP_NODELAY only applies to TCP sockets, not UDS
+            if self._socket_path is None:
+                client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+            # Per-client write lock for concurrent response writes
+            write_lock = threading.Lock()
+
             with client:
                 while self._running:
                     # Read header
@@ -131,19 +251,26 @@ class TransitServer:
                     # Read payload
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
 
-                    # Dispatch
+                    # Dispatch — calls go to the executor for parallel processing
                     if msg_type == TYPE_CALL_REQUEST:
-                        self._handle_call(payload, request_id, client)
+                        self._executor.submit(
+                            self._handle_call, payload, request_id, client, write_lock
+                        )
                     elif msg_type == TYPE_HEALTH_PING:
-                        self._handle_health_ping(request_id, client)
+                        with write_lock:
+                            self._handle_health_ping(request_id, client)
                     else:
                         print(f"[transit-py] Unknown type: {msg_type}", file=sys.stderr)
         except Exception as e:
             if self._running:
                 print(f"[transit-py] Client error: {e}", file=sys.stderr)
 
-    def _handle_call(self, payload, request_id, client):
-        """Handle a CALL_REQUEST message."""
+    def _handle_call(self, payload, request_id, client, write_lock):
+        """Handle a CALL_REQUEST message.
+
+        May be called concurrently from the executor pool. The write_lock
+        ensures responses are not interleaved on the socket.
+        """
         try:
             buf = memoryview(payload)
 
@@ -156,7 +283,7 @@ class TransitServer:
             args_len = struct.unpack_from("<I", buf, args_offset)[0]
             args_json = bytes(buf[args_offset + 4 : args_offset + 4 + args_len]).decode("utf-8")
 
-            # Look up and call the function
+            # Look up and call the function (no lock held — parallel execution)
             fn = _functions.get(fn_name)
             if fn is None:
                 status = STATUS_ERROR
@@ -171,20 +298,25 @@ class TransitServer:
                     status = STATUS_ERROR
                     result_json = json.dumps({"error": str(e)})
 
-            # Write response
+            # Write response — single allocation via pack_into
             result_bytes = result_json.encode("utf-8")
-            payload_size = 1 + 4 + len(result_bytes)  # status(1) + result_len(4) + result(N)
-            resp = struct.pack(
-                HEADER_FORMAT,
+            result_len = len(result_bytes)
+            payload_size = 1 + 4 + result_len  # status(1) + result_len(4) + result(N)
+            total_size = HEADER_SIZE + payload_size
+            resp = bytearray(total_size)
+            struct.pack_into(
+                HEADER_FORMAT, resp, 0,
                 PROTOCOL_VERSION,
                 TYPE_CALL_RESPONSE,
                 request_id,
                 payload_size,
             )
-            resp += struct.pack("<BI", status, len(result_bytes))
-            resp += result_bytes
+            struct.pack_into("<BI", resp, HEADER_SIZE, status, result_len)
+            resp[HEADER_SIZE + 5 :] = result_bytes
 
-            client.sendall(resp)
+            # Acquire lock only for the write to prevent interleaved responses
+            with write_lock:
+                client.sendall(resp)
         except Exception as e:
             print(f"[transit-py] Call handler error: {e}", file=sys.stderr)
 
@@ -194,14 +326,20 @@ class TransitServer:
         client.sendall(resp)
 
     def _recv_exact(self, sock, n):
-        """Receive exactly n bytes from a socket."""
-        data = bytearray()
-        while len(data) < n:
-            chunk = sock.recv(n - len(data))
-            if not chunk:
+        """Receive exactly n bytes from a socket.
+
+        Uses recv_into with a pre-allocated buffer and memoryview
+        to avoid intermediate allocations (zero-copy receive).
+        """
+        buf = bytearray(n)
+        view = memoryview(buf)
+        offset = 0
+        while offset < n:
+            nbytes = sock.recv_into(view[offset:], n - offset)
+            if nbytes == 0:
                 return None
-            data.extend(chunk)
-        return bytes(data)
+            offset += nbytes
+        return bytes(buf)
 
 
 # ─── Convenience function ─────────────────────────────────────────────────────

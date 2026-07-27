@@ -453,11 +453,13 @@ class PythonDevBridge implements RuntimeBridge {
   private started = false;
   private maxRestarts: number;
   private serverScript?: string;
+  private buildOverride?: BuildOverride;
 
-  constructor(dir: string, maxRestarts: number = 3, serverScript?: string) {
+  constructor(dir: string, maxRestarts: number = 3, serverScript?: string, buildOverride?: BuildOverride) {
     this.dir = resolve(dir);
     this.maxRestarts = maxRestarts;
     this.serverScript = serverScript;
+    this.buildOverride = buildOverride;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -483,10 +485,18 @@ class PythonDevBridge implements RuntimeBridge {
 
     const { PythonProcessManager } = await import("@sabeeirsharrma/python-runtime");
 
+    // Build extra env vars from config
+    const env: Record<string, string> = {};
+    if (this.buildOverride?.fastJson) {
+      env.TRANSIT_USE_ORJSON = "1";
+    }
+
     this.processManager = new PythonProcessManager({
       pythonDir: this.dir,
       maxRestarts: this.maxRestarts,
       serverScript: this.serverScript,
+      interpreter: this.buildOverride?.interpreter,
+      env,
     });
 
     await this.processManager.start();
@@ -580,7 +590,8 @@ class Transit {
     const key = `python:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript);
+    const buildOverride = this._config.build?.python;
+    const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript, buildOverride);
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);

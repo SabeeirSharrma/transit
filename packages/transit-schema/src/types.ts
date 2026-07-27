@@ -93,6 +93,8 @@ export interface BuildOverride {
   interpreter?: string;
   env?: Record<string, string>;
   jvmArgs?: string[];
+  /** Enable orjson injection for Python (2-10x faster JSON). Default: false */
+  fastJson?: boolean;
 }
 
 export interface LinkOverride {

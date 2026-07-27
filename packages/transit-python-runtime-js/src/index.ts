@@ -16,6 +16,7 @@ import { spawn, ChildProcess } from "node:child_process";
 import { createConnection, Socket } from "node:net";
 import { resolve, join } from "node:path";
 import { existsSync } from "node:fs";
+import { cpus } from "node:os";
 
 // ─── Protocol constants ───────────────────────────────────────────────────────
 
@@ -47,36 +48,39 @@ export interface PythonProcessOptions {
   serverScript?: string;
   /** Python interpreter command (default: python3) */
   interpreter?: string;
-  /** Health check interval in ms (default: 5000) */
-  healthCheckInterval?: number;
   /** Connection timeout in ms (default: 10000) */
   connectTimeout?: number;
   /** Maximum restart attempts */
   maxRestarts?: number;
+  /** Extra environment variables to pass to the Python process */
+  env?: Record<string, string>;
 }
 
 export class PythonProcessManager {
-  private options: Required<PythonProcessOptions>;
+  private options: Required<Omit<PythonProcessOptions, "env">>;
   private process: ChildProcess | null = null;
-  private socket: Socket | null = null;
+  private sockets: Socket[] = [];
   private port: number = -1;
+  private socketPath: string | null = null;
   private pending = new Map<number, PendingCall>();
   private requestIdCounter = 0;
-  private healthTimer: ReturnType<typeof setInterval> | null = null;
   private restartCount = 0;
   private ready = false;
   private readyPromise: Promise<void> | null = null;
   private stopping = false;
+  private nameCache = new Map<string, string>();
+
+  private extraEnv: Record<string, string>;
 
   constructor(options: PythonProcessOptions) {
     this.options = {
       pythonDir: options.pythonDir,
       serverScript: options.serverScript ?? "",
       interpreter: options.interpreter ?? "python3",
-      healthCheckInterval: options.healthCheckInterval ?? 5000,
       connectTimeout: options.connectTimeout ?? 10000,
       maxRestarts: options.maxRestarts ?? 3,
     };
+    this.extraEnv = options.env ?? {};
   }
 
   /**
@@ -110,7 +114,7 @@ export class PythonProcessManager {
     this.process = spawn(interpreter, [scriptPath], {
       cwd: pythonDir,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
+      env: { ...process.env, ...this.extraEnv },
     });
 
     this.process.on("error", (err) => {
@@ -127,18 +131,24 @@ export class PythonProcessManager {
       }
     });
 
-    // Read stdout for PORT=<port> line
-    this.port = await this.waitForPort(this.process);
+    // Read stdout for PORT=<port> or SOCKET=<path> line
+    const transport = await this.waitForTransport(this.process);
+    if (transport.type === "socket") {
+      this.socketPath = transport.path;
+    } else {
+      this.port = transport.port;
+    }
 
-    // Connect to the Python server
-    await this.connect();
-
-    // Start health checks
-    this.startHealthCheck();
+    // Connect to the Python server (pool of sockets for concurrency)
+    const poolSize = Math.min(cpus().length, 8);
+    await this.connectPool(poolSize);
 
     this.ready = true;
     this.restartCount = 0;
-    console.error(`[transit-python] Connected to Python process on port ${this.port}`);
+    const addr = this.socketPath
+      ? `UDS ${this.socketPath}`
+      : `TCP port ${this.port}`;
+    console.error(`[transit-python] Connected to Python process on ${addr}`);
   }
 
   /**
@@ -171,21 +181,33 @@ export class PythonProcessManager {
   }
 
   /**
-   * Wait for the Python process to print PORT=<port> on stdout.
+   * Wait for the Python process to print PORT=<port> or SOCKET=<path> on stdout.
    */
-  private waitForPort(proc: ChildProcess): Promise<number> {
+  private waitForTransport(
+    proc: ChildProcess
+  ): Promise<{ type: "socket"; path: string } | { type: "tcp"; port: number }> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error("Python process did not print PORT= within timeout"));
+        reject(
+          new Error(
+            "Python process did not print PORT= or SOCKET= within timeout"
+          )
+        );
       }, this.options.connectTimeout);
 
       let buffer = "";
       proc.stdout!.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
-        const match = buffer.match(/PORT=(\d+)/);
-        if (match) {
+        const socketMatch = buffer.match(/SOCKET=(.+)/);
+        if (socketMatch) {
           clearTimeout(timeout);
-          resolve(parseInt(match[1], 10));
+          resolve({ type: "socket", path: socketMatch[1].trim() });
+          return;
+        }
+        const portMatch = buffer.match(/PORT=(\d+)/);
+        if (portMatch) {
+          clearTimeout(timeout);
+          resolve({ type: "tcp", port: parseInt(portMatch[1], 10) });
         }
       });
 
@@ -197,14 +219,35 @@ export class PythonProcessManager {
   }
 
   /**
-   * Connect to the Python server via TCP.
+   * Connect a pool of sockets to the Python server via UDS or TCP.
    */
-  private connect(): Promise<void> {
+  private async connectPool(size: number): Promise<void> {
+    this.sockets = [];
+    for (let i = 0; i < size; i++) {
+      const socket = await this.createConnection();
+      this.sockets.push(socket);
+    }
+  }
+
+  /**
+   * Create a single connection to the Python server.
+   */
+  private createConnection(): Promise<Socket> {
     return new Promise((resolve, reject) => {
-      const socket = createConnection({ port: this.port, host: "127.0.0.1" }, () => {
-        this.socket = socket;
-        socket.setNoDelay(true);
-        resolve();
+      const connectOpts = this.socketPath
+        ? { path: this.socketPath }
+        : { port: this.port, host: "127.0.0.1" };
+
+      const socket = createConnection(connectOpts, () => {
+        // TCP_NODELAY only applies to TCP sockets
+        if (!this.socketPath) {
+          socket.setNoDelay(true);
+        }
+        // Enable TCP keepalive to detect dead connections at OS level
+        socket.setKeepAlive(true, 5000);
+        // Set up response handler for this socket
+        this.setupResponseHandler(socket);
+        resolve(socket);
       });
 
       socket.on("error", reject);
@@ -212,37 +255,6 @@ export class PythonProcessManager {
         reject(new Error("Connection timeout"));
       });
     });
-  }
-
-  /**
-   * Start periodic health checks.
-   */
-  private startHealthCheck(): void {
-    this.healthTimer = setInterval(async () => {
-      try {
-        await this.healthCheck();
-      } catch {
-        console.error("[transit-python] Health check failed, restarting...");
-        this.ready = false;
-        this.maybeRestart();
-      }
-    }, this.options.healthCheckInterval);
-  }
-
-  /**
-   * Send a health ping and wait for pong.
-   */
-  async healthCheck(): Promise<void> {
-    const ping = Buffer.alloc(HEADER_SIZE);
-    ping.writeUInt8(PROTOCOL_VERSION, 0);
-    ping.writeUInt8(TYPE_HEALTH_PING, 1);
-    ping.writeUInt32LE(0, 2); // requestId
-    ping.writeUInt32LE(0, 6); // payloadLen
-
-    const response = await this.sendRaw(ping);
-    if (response.readUInt8(1) !== TYPE_HEALTH_PONG) {
-      throw new Error("Expected HEALTH_PONG response");
-    }
   }
 
   /**
@@ -258,8 +270,8 @@ export class PythonProcessManager {
     this.ready = false;
     this.readyPromise = null;
     // Clean up old state
-    this.socket?.destroy();
-    this.socket = null;
+    for (const s of this.sockets) s.destroy();
+    this.sockets = [];
     this.process?.kill();
     this.process = null;
     // Restart after a delay
@@ -271,16 +283,28 @@ export class PythonProcessManager {
   }
 
   /**
+   * Call multiple Python functions concurrently (request pipelining).
+   * Fires N calls without awaiting, then collects all responses.
+   */
+  async callBatch(calls: Array<{ name: string; args: string }>): Promise<string[]> {
+    return Promise.all(calls.map(c => this.callFunction(c.name, c.args)));
+  }
+
+  /**
    * Call a Python function.
    * Converts snake_case names to camelCase (Python server registers camelCase names).
    */
   async callFunction(functionName: string, argsJson: string): Promise<string> {
-    if (!this.ready || !this.socket) {
+    if (!this.ready || this.sockets.length === 0) {
       throw new Error("Python process not ready");
     }
 
-    // Convert snake_case → camelCase to match Python server's registered names
-    const pyName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+    // Convert snake_case → camelCase (cached to avoid per-call regex)
+    let pyName = this.nameCache.get(functionName);
+    if (pyName === undefined) {
+      pyName = functionName.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+      this.nameCache.set(functionName, pyName);
+    }
 
     // Encode CALL_REQUEST
     const fnBytes = Buffer.from(pyName, "utf-8");
@@ -321,10 +345,11 @@ export class PythonProcessManager {
 
   /**
    * Send a raw message and wait for a response.
+   * Uses round-robin across the socket pool.
    */
   private sendRaw(message: Buffer): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      if (!this.socket) {
+      if (this.sockets.length === 0) {
         reject(new Error("Not connected"));
         return;
       }
@@ -338,35 +363,45 @@ export class PythonProcessManager {
 
       this.pending.set(requestId, { resolve, reject, timer });
 
-      // Set up response listener if not already listening
-      if (!this.socket.listenerCount("data")) {
-        this.setupResponseHandler();
-      }
-
-      this.socket.write(message);
+      // Round-robin across socket pool
+      const socket = this.sockets[this.requestIdCounter % this.sockets.length];
+      socket.write(message);
     });
   }
 
   /**
-   * Set up the response handler on the socket.
+   * Set up the response handler on a socket.
+   * Uses a growing buffer with offset tracking instead of Buffer.concat()
+   * to avoid per-chunk allocations.
    */
-  private setupResponseHandler(): void {
-    if (!this.socket) return;
+  private setupResponseHandler(socket: Socket): void {
+    const INITIAL_CAPACITY = 65536; // 64KB
+    let buffer = Buffer.allocUnsafe(INITIAL_CAPACITY);
+    let offset = 0; // bytes of valid data in buffer
 
-    let buffer = Buffer.alloc(0);
-
-    this.socket.on("data", (chunk: Buffer) => {
-      buffer = Buffer.concat([buffer, chunk]);
+    socket.on("data", (chunk: Buffer) => {
+      // Ensure capacity
+      const needed = offset + chunk.length;
+      if (needed > buffer.length) {
+        let newSize = buffer.length;
+        while (newSize < needed) newSize *= 2;
+        const newBuf = Buffer.allocUnsafe(newSize);
+        buffer.copy(newBuf, 0, 0, offset);
+        buffer = newBuf;
+      }
+      chunk.copy(buffer, offset);
+      offset += chunk.length;
 
       // Process complete messages
-      while (buffer.length >= HEADER_SIZE) {
-        const payloadLen = buffer.readUInt32LE(6);
+      let consumed = 0;
+      while (offset - consumed >= HEADER_SIZE) {
+        const payloadLen = buffer.readUInt32LE(consumed + 6);
         const totalLen = HEADER_SIZE + payloadLen;
 
-        if (buffer.length < totalLen) break; // incomplete message
+        if (offset - consumed < totalLen) break; // incomplete message
 
-        const message = buffer.subarray(0, totalLen);
-        buffer = buffer.subarray(totalLen);
+        const message = Buffer.from(buffer.subarray(consumed, consumed + totalLen));
+        consumed += totalLen;
 
         const requestId = message.readUInt32LE(2);
         const pending = this.pending.get(requestId);
@@ -375,6 +410,14 @@ export class PythonProcessManager {
           clearTimeout(pending.timer);
           pending.resolve(message);
         }
+      }
+
+      // Compact: shift unconsumed data to front
+      if (consumed > 0) {
+        if (consumed < offset) {
+          buffer.copy(buffer, 0, consumed, offset);
+        }
+        offset -= consumed;
       }
     });
   }
@@ -386,11 +429,6 @@ export class PythonProcessManager {
     this.stopping = true;
     this.ready = false;
 
-    if (this.healthTimer) {
-      clearInterval(this.healthTimer);
-      this.healthTimer = null;
-    }
-
     // Reject all pending calls
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
@@ -398,9 +436,9 @@ export class PythonProcessManager {
     }
     this.pending.clear();
 
-    // Close socket
-    this.socket?.destroy();
-    this.socket = null;
+    // Close all sockets
+    for (const s of this.sockets) s.destroy();
+    this.sockets = [];
 
     // Kill process
     if (this.process) {

@@ -7,6 +7,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
 /**
@@ -45,7 +46,9 @@ public class TransitServer {
     }
 
     private final Map<String, TransitFunction> functions = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+        Math.min(Runtime.getRuntime().availableProcessors(), 8)
+    );
     private ServerSocket serverSocket;
     private volatile boolean running = false;
     private int port = -1;
@@ -121,6 +124,9 @@ public class TransitServer {
             var in = new DataInputStream(new BufferedInputStream(client.getInputStream()));
             var out = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
 
+            // Per-client write lock for concurrent response writes
+            var writeLock = new ReentrantLock();
+
             while (running && !client.isClosed()) {
                 // Read header
                 byte[] header = readExact(in, HEADER_SIZE);
@@ -141,9 +147,11 @@ public class TransitServer {
                 byte[] payload = payloadLen > 0 ? readExact(in, payloadLen) : new byte[0];
                 if (payload == null && payloadLen > 0) break;
 
-                // Dispatch
+                // Dispatch — calls go to the executor for parallel processing
                 switch (type) {
-                    case TYPE_CALL_REQUEST -> handleCall(payload, requestId, out);
+                    case TYPE_CALL_REQUEST -> executor.submit(
+                        () -> handleCall(payload, requestId, out, writeLock)
+                    );
                     case TYPE_HEALTH_PING -> handleHealthPing(requestId, out);
                     default -> System.err.println("[transit-java] Unknown type: " + type);
                 }
@@ -155,54 +163,64 @@ public class TransitServer {
         }
     }
 
-    private void handleCall(byte[] payload, int requestId, DataOutputStream out) throws IOException {
-        ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
+    private void handleCall(byte[] payload, int requestId, DataOutputStream out, ReentrantLock writeLock) {
+        try {
+            ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
 
-        // Read function name
-        int fnNameLen = buf.getShort() & 0xFFFF;
-        byte[] fnNameBytes = new byte[fnNameLen];
-        buf.get(fnNameBytes);
-        String fnName = new String(fnNameBytes, StandardCharsets.UTF_8);
+            // Read function name
+            int fnNameLen = buf.getShort() & 0xFFFF;
+            byte[] fnNameBytes = new byte[fnNameLen];
+            buf.get(fnNameBytes);
+            String fnName = new String(fnNameBytes, StandardCharsets.UTF_8);
 
-        // Read args JSON
-        int argsLen = buf.getInt();
-        byte[] argsBytes = new byte[argsLen];
-        buf.get(argsBytes);
-        String argsJson = new String(argsBytes, StandardCharsets.UTF_8);
+            // Read args JSON
+            int argsLen = buf.getInt();
+            byte[] argsBytes = new byte[argsLen];
+            buf.get(argsBytes);
+            String argsJson = new String(argsBytes, StandardCharsets.UTF_8);
 
-        // Look up and call the function
-        TransitFunction fn = functions.get(fnName);
-        String resultJson;
-        byte status;
+            // Look up and call the function (no lock held — parallel execution)
+            TransitFunction fn = functions.get(fnName);
+            String resultJson;
+            byte status;
 
-        if (fn == null) {
-            status = STATUS_ERROR;
-            resultJson = "{\"error\":\"Function '" + fnName + "' not found. Available: " +
-                         functions.keySet() + "\"}";
-        } else {
-            try {
-                resultJson = fn.apply(argsJson);
-                status = STATUS_OK;
-            } catch (Exception e) {
+            if (fn == null) {
                 status = STATUS_ERROR;
-                resultJson = "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}";
+                resultJson = "{\"error\":\"Function '" + fnName + "' not found. Available: " +
+                             functions.keySet() + "\"}";
+            } else {
+                try {
+                    resultJson = fn.apply(argsJson);
+                    status = STATUS_OK;
+                } catch (Exception e) {
+                    status = STATUS_ERROR;
+                    resultJson = "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}";
+                }
             }
+
+            // Build response — single allocation
+            byte[] resultBytes = resultJson.getBytes(StandardCharsets.UTF_8);
+            ByteBuffer resp = ByteBuffer.allocate(HEADER_SIZE + 1 + 4 + resultBytes.length)
+                                        .order(ByteOrder.LITTLE_ENDIAN);
+            resp.put(PROTOCOL_VERSION);
+            resp.put(TYPE_CALL_RESPONSE);
+            resp.putInt(requestId);
+            resp.putInt(1 + 4 + resultBytes.length); // payload: status(1) + result_len(4) + result(N)
+            resp.put(status);
+            resp.putInt(resultBytes.length);
+            resp.put(resultBytes);
+
+            // Acquire lock only for the write to prevent interleaved responses
+            writeLock.lock();
+            try {
+                out.write(resp.array());
+                out.flush();
+            } finally {
+                writeLock.unlock();
+            }
+        } catch (Exception e) {
+            System.err.println("[transit-java] Call handler error: " + e.getMessage());
         }
-
-        // Write response
-        byte[] resultBytes = resultJson.getBytes(StandardCharsets.UTF_8);
-        ByteBuffer resp = ByteBuffer.allocate(HEADER_SIZE + 1 + 4 + resultBytes.length)
-                                    .order(ByteOrder.LITTLE_ENDIAN);
-        resp.put(PROTOCOL_VERSION);
-        resp.put(TYPE_CALL_RESPONSE);
-        resp.putInt(requestId);
-        resp.putInt(1 + 4 + resultBytes.length); // payload: status(1) + result_len(4) + result(N)
-        resp.put(status);
-        resp.putInt(resultBytes.length);
-        resp.put(resultBytes);
-
-        out.write(resp.array());
-        out.flush();
     }
 
     private void handleHealthPing(int requestId, DataOutputStream out) throws IOException {

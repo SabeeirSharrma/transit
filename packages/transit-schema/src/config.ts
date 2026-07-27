@@ -125,6 +125,15 @@ function validateBuildOverride(
     });
   }
 
+  if (value.fastJson !== undefined) {
+    if (typeof value.fastJson !== "boolean") {
+      throw new ConfigError(
+        `transit.config.json → build.${key}.fastJson: expected a boolean, got ${typeof value.fastJson}`
+      );
+    }
+    override.fastJson = value.fastJson;
+  }
+
   return override;
 }
 
