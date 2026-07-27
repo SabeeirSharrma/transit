@@ -14,7 +14,7 @@ This benchmark suite measures the performance of different inter-process communi
 - **Apache Thrift**: Cross-language RPC framework (binary protocol)
 - **Unix Socket + JSON**: Raw Unix domain sockets with JSON serialization
 - **Subprocess stdin/stdout**: Process communication via standard I/O
-- **PyO3**: Direct Python-to-Rust FFI calls (lower bound)
+- **PyO3**: Direct Python-to-Rust FFI calls (lower bound; computational only)
 - **ZeroMQ**: High-performance asynchronous messaging library
 - **Redis Pub/Sub**: Redis publish-subscribe messaging pattern
 
@@ -56,40 +56,46 @@ Simulates real-world chat server workloads:
 ## Directory Structure
 
 ```
-transit/
-├── benchmark/
-│   ├── run-all.sh                    # Top-level runner
-│   ├── generate-grpc.sh              # Generate gRPC code
-│   ├── computational/                # Computational benchmark
-│   │   ├── run.sh                   # Standalone runner
-│   │   ├── run-benchmark.js         # Node.js orchestrator
-│   │   ├── package.json             # Dependencies
-│   │   ├── README.md               # Detailed documentation
-│   │   ├── fastapi/                 # FastAPI implementation
-│   │   ├── transit/                 # Transit implementations
-│   │   ├── grpc/                   # gRPC implementation
-│   │   ├── thrift/                 # Apache Thrift implementation
-│   │   ├── unix-socket/            # Unix domain socket implementation
-│   │   ├── subprocess/             # Subprocess stdin/stdout implementation
-│   │   ├── pyo3/                   # PyO3 implementation
-│   │   ├── zeromq/                 # ZeroMQ implementation
-│   │   ├── redis-pubsub/           # Redis Pub/Sub implementation
-│   │   └── results/               # Benchmark results
-│   └── chat-server/                 # Chat server benchmark
-│       ├── run.sh                   # Standalone runner
-│       ├── run-benchmark.js         # Node.js orchestrator
-│       ├── package.json             # Dependencies
-│       ├── README.md               # Detailed documentation
-│       ├── fastapi/                 # FastAPI implementation
-│       ├── transit/                 # Transit implementations
-│       ├── grpc/                   # gRPC implementation
-│       ├── thrift/                 # Apache Thrift implementation
-│       ├── unix-socket/            # Unix domain socket implementation
-│       ├── subprocess/             # Subprocess stdin/stdout implementation
-│       ├── zeromq/                 # ZeroMQ implementation
-│       ├── redis-pubsub/           # Redis Pub/Sub implementation
-│       └── results/               # Benchmark results
-└── README.md                        # This file
+benchmark/
+├── run-all.sh                    # Top-level runner
+├── generate-grpc.sh              # Generate gRPC code
+├── computational/                # Computational benchmark
+│   ├── run.sh                   # Standalone runner
+│   ├── run-benchmark.js         # Node.js orchestrator
+│   ├── analyze-results.py       # Results analysis script
+│   ├── package.json             # Dependencies
+│   ├── README.md               # Detailed documentation
+│   ├── fastapi/                 # FastAPI implementation
+│   ├── transit/                 # Transit implementations
+│   │   ├── rust/               # Rust native addon
+│   │   ├── python/             # Python TCP server
+│   │   └── java/               # Java TCP server
+│   ├── grpc/                   # gRPC implementation
+│   ├── thrift/                 # Apache Thrift implementation
+│   ├── unix-socket/            # Unix domain socket implementation
+│   ├── subprocess/             # Subprocess stdin/stdout implementation
+│   ├── pyo3/                   # PyO3 implementation
+│   ├── zeromq/                 # ZeroMQ implementation
+│   ├── redis-pubsub/           # Redis Pub/Sub implementation
+│   └── results/               # Benchmark results
+├── chat-server/                 # Chat server benchmark
+│   ├── run.sh                   # Standalone runner
+│   ├── run-benchmark.js         # Node.js orchestrator
+│   ├── package.json             # Dependencies
+│   ├── README.md               # Detailed documentation
+│   ├── fastapi/                 # FastAPI implementation
+│   ├── transit/                 # Transit implementations
+│   │   ├── rust/               # Rust native addon
+│   │   ├── python/             # Python TCP server
+│   │   └── java/               # Java TCP server
+│   ├── grpc/                   # gRPC implementation
+│   ├── thrift/                 # Apache Thrift implementation
+│   ├── unix-socket/            # Unix domain socket implementation
+│   ├── subprocess/             # Subprocess stdin/stdout implementation
+│   ├── zeromq/                 # ZeroMQ implementation
+│   ├── redis-pubsub/           # Redis Pub/Sub implementation
+│   └── results/               # Benchmark results
+└── README.md                    # This file
 ```
 
 ## Quick Start
@@ -107,7 +113,7 @@ transit/
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd transit
+cd <repository-directory>
 
 # Run all benchmarks
 ./benchmark/run-all.sh
@@ -118,56 +124,36 @@ cd transit
 ```bash
 # Run computational benchmark
 cd benchmark/computational
-./run.sh
+npm install
+npm run setup
+npm run benchmark
 
 # Run chat server benchmark
 cd benchmark/chat-server
-./run.sh
+npm install
+npm run setup
+npm run benchmark
+```
 
-# Run only serial benchmarks
+### Run Mode Flags
+
+Each `run.sh` script supports mode flags:
+
+```bash
+# Run only serial benchmarks (100 iterations)
 ./run.sh --serial-only
 
-# Run only concurrent benchmarks
+# Run only concurrent benchmarks (10 parallel requests)
 ./run.sh --concurrent-only
 ```
 
-### Running Comparison Targets
-
-Each comparison target can be run independently:
+### Top-Level Runner Options
 
 ```bash
-# Run gRPC benchmark
-cd benchmark/computational/grpc
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python server.py &
-node client.js
-
-# Run Thrift benchmark
-cd benchmark/computational/thrift
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python server.py &
-
-# Run Unix socket benchmark
-cd benchmark/computational/unix-socket
-python3 -m venv .venv
-.venv/bin/python server.py &
-node client.js
-
-# Run ZeroMQ benchmark
-cd benchmark/computational/zeromq
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python server.py &
-node client.js
-
-# Run Redis Pub/Sub benchmark
-cd benchmark/computational/redis-pubsub
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python server.py &
-node client.js
+./benchmark/run-all.sh --computational-only   # Run only computational
+./benchmark/run-all.sh --chat-only            # Run only chat server
+./benchmark/run-all.sh --serial-only          # Run serial tests only
+./benchmark/run-all.sh --concurrent-only      # Run concurrent tests only
 ```
 
 ## Output
@@ -176,13 +162,13 @@ node client.js
 
 Each benchmark run generates:
 
-- **`benchmark-{timestamp}.json`** — Full machine-readable results with latency stats (min, max, mean, p50, p95, p99), throughput (ops/sec), error counts, and per-benchmark breakdowns.
+- **`results/benchmark-{timestamp}.json`** — Full machine-readable results with latency stats (min, max, mean, p50, p95, p99), throughput (ops/sec), error counts, and per-benchmark breakdowns.
 
-- **`benchmark.log`** — Human-readable summary table with mean latency per operation and a winner breakdown.
+- **`results/benchmark.log`** — Human-readable summary table with mean latency per operation and a winner breakdown.
 
-### Generated Documentation
+### Analysis Script
 
-- **`benchmark/benchmark.md`** — Comprehensive results document comparing all IPC mechanisms with detailed tables and analysis.
+The computational benchmark includes `analyze-results.py` for deeper analysis of result files.
 
 ## Key Metrics
 
@@ -287,4 +273,4 @@ See the LICENSE file for details.
 For issues and questions:
 - Open an issue on GitHub
 - Check the documentation in each benchmark directory
-- Review the generated `benchmark/benchmark.md` for detailed results
+- Review the generated benchmark results for detailed analysis
