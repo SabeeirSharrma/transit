@@ -9,6 +9,7 @@ __pycache__/
 **.log
 .transit-cache.json
 **-lock
+**.lock
 
 # Benchmark directories
 benchmark/computational/fastapi/.venv/
