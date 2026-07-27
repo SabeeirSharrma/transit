@@ -1,5 +1,16 @@
 # @sabeeirsharrma/java-runtime
 
+## 2.1.0
+
+### Minor Changes
+
+- implement socket connection pooling and concurrent request handling for improved performance
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/schema@2.1.0
+
 ## 2.0.1
 
 ### Patch Changes

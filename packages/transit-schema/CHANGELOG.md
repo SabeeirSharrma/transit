@@ -1,5 +1,11 @@
 # @sabeeirsharrma/schema
 
+## 2.1.0
+
+### Minor Changes
+
+- implement socket connection pooling and concurrent request handling for improved performance
+
 ## 2.0.1
 
 ### Patch Changes

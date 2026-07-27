@@ -1,5 +1,19 @@
 # transit-cli
 
+## 2.1.0
+
+### Minor Changes
+
+- implement socket connection pooling and concurrent request handling for improved performance
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/codegen@2.1.0
+  - @sabeeirsharrma/transit@2.1.0
+  - @sabeeirsharrma/scanner@2.1.0
+  - @sabeeirsharrma/schema@2.1.0
+
 ## 2.0.1
 
 ### Patch Changes

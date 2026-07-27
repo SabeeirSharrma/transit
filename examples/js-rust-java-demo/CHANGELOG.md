@@ -1,5 +1,16 @@
 # js-rust-java-demo
 
+## 2.1.0
+
+### Minor Changes
+
+- implement socket connection pooling and concurrent request handling for improved performance
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/transit@2.1.0
+
 ## 2.0.1
 
 ### Patch Changes
