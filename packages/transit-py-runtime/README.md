@@ -4,7 +4,7 @@
 
 Transit lets you write functions in Rust, Java, or Python — then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
 
-For full docs, go to: https://sabeeir.qd.je/transit
+For full docs, go to: <https://sabeeir.qd.je/transit>
 
 ```js
 import { transit } from "transit"
@@ -23,15 +23,26 @@ const javaResult = await jv.handleSpecialized(rustResult)
 const pythonResult = await py.analyzeData(javaResult)
 ```
 
+## Transit VS FastAPI - Benchmarks
+
+Below are the results of an automated benchmark test for Transit and FastAPI
+
+If you would like to benchmark on your own hardware, you can switch to the [Benchmark Branch](https://github.com/sabeeirsharrma/transit/tree/benchmark/)
+
+![Benchmarks](benchamrks.svg)
+
+![Benchmarks](benchmarks2.svg)
+
 ## Quick Start
 
 ### 1. Install
 
 ```bash
-bun install -g transit # You also also npm but bun is recommended
+bun install -g transit-cli # You also also npm but bun is recommended
 ```
 
 Requirements:
+
 - **Node.js** >= 20
 - **Rust** toolchain (for scanner + Rust addons)
 - **Java** JDK 21+ (if using Java)
@@ -41,6 +52,7 @@ Requirements:
 ### 2. Write functions in any supported language
 
 **Rust** — write normal `pub fn` functions:
+
 ```rust
 // rust/src/lib.rs
 pub fn process_job(data: Vec<u8>) -> String {
@@ -49,6 +61,7 @@ pub fn process_job(data: Vec<u8>) -> String {
 ```
 
 **Java** — write public methods that take and return JSON strings:
+
 ```java
 // java/src/main/java/com/example/App.java
 public class App {
@@ -59,6 +72,7 @@ public class App {
 ```
 
 **Python** — write functions that take and return JSON strings:
+
 ```python
 # python/service.py
 def process_data(args_json):
