@@ -8,7 +8,32 @@ __pycache__/
 *.pyc
 **.log
 .transit-cache.json
-chat-server-benchmark/results/benchmark-1785042997758.json
-chat-server-benchmark/results/benchmark-1785043285371.json
-chat-server-benchmark/transit/rust/index.node
 **-lock
+
+# Benchmark directories
+benchmark/computational/fastapi/.venv/
+benchmark/computational/transit/rust/target/
+benchmark/computational/transit/rust/index.node
+benchmark/computational/transit/java/build/
+benchmark/computational/grpc/.venv/
+benchmark/computational/thrift/.venv/
+benchmark/computational/unix-socket/.venv/
+benchmark/computational/subprocess/.venv/
+benchmark/computational/zeromq/.venv/
+benchmark/computational/redis-pubsub/.venv/
+benchmark/computational/pyo3/target/
+
+benchmark/chat-server/fastapi/.venv/
+benchmark/chat-server/transit/rust/target/
+benchmark/chat-server/transit/rust/index.node
+benchmark/chat-server/transit/java/build/
+benchmark/chat-server/grpc/.venv/
+benchmark/chat-server/thrift/.venv/
+benchmark/chat-server/unix-socket/.venv/
+benchmark/chat-server/subprocess/.venv/
+benchmark/chat-server/zeromq/.venv/
+benchmark/chat-server/redis-pubsub/.venv/
+
+# Old directories (removed)
+chat-server-benchmark/
+computational-benchmark/

@@ -1,7 +1,0 @@
-node_modules/
-results/
-fastapi/.venv/
-transit/rust/target/
-transit/rust/index.node
-transit/java/build/
-transit.config.json

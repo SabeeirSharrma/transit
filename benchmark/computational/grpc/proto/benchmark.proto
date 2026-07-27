@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package computational;
+
+service BenchmarkService {
+  rpc Compute(ComputeRequest) returns (ComputeResponse);
+  rpc ComputeBatch(ComputeBatchRequest) returns (ComputeBatchResponse);
+}
+
+message ComputeRequest {
+  string operation = 1;
+  bytes payload = 2;
+}
+
+message ComputeResponse {
+  bytes result = 2;
+  double execution_time_ms = 3;
+}
+
+message ComputeBatchRequest {
+  repeated ComputeRequest requests = 1;
+}
+
+message ComputeBatchResponse {
+  repeated ComputeResponse responses = 1;
+  double total_time_ms = 2;
+}

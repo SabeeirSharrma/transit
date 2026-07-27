@@ -1,0 +1,32 @@
+{
+  "name": "chat-server-transit-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sabeeirsharrma/transit": "^2.0.1",
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.10",
+    "zeromq": "^6.0.0-beta.16",
+    "ioredis": "^5.3.2"
+  },
+  "scripts": {
+    "benchmark": "node run-benchmark.js",
+    "build:rust": "cd transit/rust && cargo build --release && cp target/release/libchat_benchmark_rust.so index.node",
+    "build:java": "mkdir -p transit/java/build && javac -d transit/java/build transit/java/src/main/java/chatservice/ChatService.java",
+    "install:fastapi": "cd fastapi && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:grpc": "cd grpc && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:grpc": "grpc/.venv/bin/python grpc/server.py",
+    "install:thrift": "cd thrift && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:thrift": "thrift/.venv/bin/python thrift/server.py",
+    "install:unix-socket": "cd unix-socket && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:unix-socket": "unix-socket/.venv/bin/python unix-socket/server.py",
+    "install:subprocess": "cd subprocess && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:subprocess": "subprocess/.venv/bin/python subprocess/server.py",
+    "install:zeromq": "cd zeromq && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:zeromq": "zeromq/.venv/bin/python zeromq/server.py",
+    "install:redis-pubsub": "cd redis-pubsub && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:redis-pubsub": "redis-pubsub/.venv/bin/python redis-pubsub/server.py",
+    "setup": "npm run build:rust && npm run build:java && npm run install:fastapi && npm run install:grpc && npm run install:thrift && npm run install:unix-socket && npm run install:subprocess && npm run install:zeromq && npm run install:redis-pubsub"
+  }
+}
