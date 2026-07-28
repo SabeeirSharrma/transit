@@ -1,5 +1,16 @@
 # js-rust-java-demo
 
+## 2.4.0
+
+### Minor Changes
+
+- Fix request pipelining in python
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/transit@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes

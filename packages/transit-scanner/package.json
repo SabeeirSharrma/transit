@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/scanner",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Tree-sitter-based function discovery engine for Transit (Rust native addon)",
   "main": "index.js",
   "types": "index.d.ts",

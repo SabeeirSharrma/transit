@@ -1,5 +1,19 @@
 # transit-cli
 
+## 2.4.0
+
+### Minor Changes
+
+- Fix request pipelining in python
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/codegen@2.4.0
+  - @sabeeirsharrma/transit@2.4.0
+  - @sabeeirsharrma/scanner@2.4.0
+  - @sabeeirsharrma/schema@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes

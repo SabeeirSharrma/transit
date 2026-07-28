@@ -1,5 +1,16 @@
 # @sabeeirsharrma/java-runtime
 
+## 2.4.0
+
+### Minor Changes
+
+- Fix request pipelining in python
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/schema@2.4.0
+
 ## 2.3.0
 
 ### Minor Changes
