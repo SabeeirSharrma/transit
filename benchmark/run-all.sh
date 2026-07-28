@@ -62,7 +62,7 @@ fi
 # Run chat server benchmark
 if [ "$BENCHMARK" = "both" ] || [ "$BENCHMARK" = "chat" ]; then
     echo "=== Running Chat Server Benchmark ==="
-    cd "$SCRIPT_DIR/chat-server"
+    cd "$SCRIPT_DIR/../chat-server-benchmark"
     if [ "$MODE" = "both" ]; then
         ./run.sh
     elif [ "$MODE" = "serial" ]; then

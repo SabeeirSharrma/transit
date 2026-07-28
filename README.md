@@ -18,6 +18,81 @@ This benchmark suite measures the performance of different inter-process communi
 - **ZeroMQ**: High-performance asynchronous messaging library
 - **Redis Pub/Sub**: Redis publish-subscribe messaging pattern
 
+## Quick Start
+
+### Prerequisites
+
+- Node.js >= 20
+- Rust toolchain (for Transit/Rust)
+- Java JDK 21+ (for Transit/Java)
+- Python 3.10+
+- Redis (for Redis Pub/Sub benchmark)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd <repository-directory>/benchmark
+
+# Install Node.js dependencies for both benchmarks
+cd benchmark/computational && npm install
+cd ../chat-server && npm install
+cd ../..
+
+# Install Python packages (system-wide)
+pip install grpcio grpcio-tools thrift pyzmq redis
+
+# Build Rust native addons
+cd benchmark/computational/transit/rust && cargo build --release
+cd ../../chat-server/transit/rust && cargo build --release
+cd ../../..
+
+# Compile Java services
+cd benchmark/computational/transit/java && mkdir -p build && javac -d build -cp libs/gson-2.10.1.jar src/main/java/computational/*.java
+cd ../../chat-server/transit/java && mkdir -p build && javac -d build -cp libs/gson-2.10.1.jar src/main/java/chatservice/*.java
+cd ../../../..
+```
+
+### Running All Benchmarks
+
+```bash
+# Run both computational and chat-server benchmarks
+cd benchmark/benchmark
+./run-all.sh
+```
+
+### Running Individual Benchmarks
+
+```bash
+# Run computational benchmark only
+cd benchmark/benchmark/computational
+./run.sh
+
+# Run chat-server benchmark only
+cd benchmark/chat-server-benchmark
+./run.sh
+```
+
+### Run Mode Flags
+
+```bash
+# Run only serial benchmarks (100 iterations, single request)
+./run.sh --serial-only
+
+# Run only concurrent benchmarks (10 parallel requests)
+./run.sh --concurrent-only
+```
+
+### Top-Level Runner Options
+
+```bash
+./run-all.sh --computational-only   # Run only computational
+./run-all.sh --chat-only            # Run only chat server
+./run-all.sh --serial-only          # Run serial tests only
+./run-all.sh --concurrent-only      # Run concurrent tests only
+```
+
 ## Benchmark Categories
 
 ### Computational Benchmark
@@ -33,32 +108,6 @@ Tests CPU-intensive operations across language boundaries:
 | **Graph Processing** | BFS, Dijkstra, PageRank, connected components | Graph algorithms |
 | **Fibonacci Memo** | Memoized recursion (n=38) | CPU-bound recursion |
 | **SHA-256 Hashing** | 10K rounds of SHA-256 | Crypto/compute |
-
-## Results (Serial — single request, 100 iterations)
-
-> Hardware: Arch Linux, AMD Ryzen — July 2026
-
-| Operation | FastAPI | Transit/Rust | Transit/Java | Transit/Python | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub | PyO3 | Winner |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **ETL Pipeline** | 2.06ms | 0.29ms | 0.40ms | 1.13ms | 2.47ms | 2.37ms | 1.40ms | 1.62ms | 1.89ms | 2.10ms | 0.61ms | **Transit/Rust** (7.2x) |
-| **Text Analysis** | 15.78ms | 0.71ms | 0.41ms | 15.24ms | 14.30ms | 26.62ms | 16.84ms | 11.91ms | 11.86ms | 12.16ms | 2.52ms | **Transit/Java** (38.1x) |
-| **Matrix Multiply** | 28.85ms | 1.19ms | 1.24ms | 18.39ms | 20.18ms | 54.59ms | 20.73ms | 18.22ms | 18.27ms | 18.28ms | 3.80ms | **Transit/Rust** (24.2x) |
-| **Matrix Determinant** | 22.72ms | 0.08ms | 0.11ms | 22.10ms | 27.36ms | 37.44ms | 32.84ms | 26.10ms | 25.01ms | 26.19ms | 2.06ms | **Transit/Rust** (283.8x) |
-| **Graph Processing** | 10.55ms | 0.37ms | 0.51ms | 6.95ms | 6.53ms | 13.36ms | 11.51ms | 5.04ms | 6.03ms | 5.56ms | 2.17ms | **Transit/Rust** (28.4x) |
-| **Fibonacci Memo** | 1.14ms | 0.05ms | 0.08ms | 0.19ms | 1.00ms | 0.24ms | 0.19ms | 0.06ms | 0.09ms | 0.55ms | 0.09ms | **Transit/Rust** (22.7x) |
-| **SHA-256 Hashing** | 5.20ms | 0.06ms | 0.16ms | 4.75ms | 5.67ms | 9.19ms | 9.82ms | 4.66ms | 4.89ms | 5.17ms | 0.69ms | **Transit/Rust** (93.8x) |
-
-## Results (Concurrent — 10 parallel requests)
-
-| Operation | FastAPI | Transit/Rust | Transit/Java | Transit/Python | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub | PyO3 | Winner |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **ETL Pipeline** | 15.35ms | 1.44ms | 1.89ms | 6.15ms | 13.16ms | 6.55ms | 4.45ms | 1.95ms | 1.26ms | 3.65ms | 1.08ms | **PyO3** (14.2x) |
-| **Text Analysis** | 131.42ms | 3.61ms | 3.99ms | 235.37ms | 177.89ms | 174.62ms | 168.55ms | 64.48ms | 6.38ms | 61.35ms | 9.90ms | **Transit/Rust** (36.4x) |
-| **Matrix Multiply** | 227.63ms | 5.83ms | 7.24ms | 236.01ms | 222.78ms | 239.70ms | 214.76ms | 77.20ms | 10.55ms | 80.37ms | 17.94ms | **Transit/Rust** (39.0x) |
-| **Matrix Determinant** | 200.48ms | 0.54ms | 1.91ms | 381.61ms | 369.21ms | 400.01ms | 339.41ms | 142.29ms | 8.91ms | 157.44ms | 10.77ms | **Transit/Rust** (374.5x) |
-| **Graph Processing** | 91.94ms | 2.07ms | 3.32ms | 108.39ms | 63.66ms | 56.09ms | 42.31ms | 28.29ms | 2.45ms | 30.37ms | 7.19ms | **Transit/Rust** (44.3x) |
-| **Fibonacci Memo** | 4.30ms | 0.11ms | 1.77ms | 0.71ms | 3.40ms | 1.50ms | 0.71ms | 0.10ms | 0.09ms | 1.01ms | 0.15ms | **ZeroMQ** (46.6x) |
-| **SHA-256 Hashing** | 46.42ms | 0.26ms | 1.86ms | 65.39ms | 54.91ms | 46.18ms | 27.70ms | 28.49ms | 1.71ms | 28.53ms | 4.68ms | **Transit/Rust** (180.1x) |
 
 ### Chat Server Benchmark
 
@@ -79,124 +128,98 @@ Simulates real-world chat server workloads:
 | **User Lookup** | Fetch user from store | Database lookup |
 | **Channel History** | Fetch recent messages | Message retrieval |
 
-## Chat Server Results (Serial — single request, 100 iterations)
+## Results (Serial — single request, 100 iterations)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Winner |
-|-----------|---------|--------------|----------------|--------------|--------|
-| **Message Send Pipeline** | 0.91ms | 0.00ms | 0.22ms | 0.31ms | **Transit/Rust** (237.3x) |
-| **Fan-out Delivery** | 1.23ms | 0.02ms | 0.29ms | 0.12ms | **Transit/Rust** (54.4x) |
-| **Session Validation** | 0.75ms | 0.00ms | 0.19ms | 0.14ms | **Transit/Rust** (215.6x) |
-| **Typing Indicator** | 0.83ms | 0.00ms | 0.12ms | 0.14ms | **Transit/Rust** (456.5x) |
-| **Read Receipt** | 0.76ms | 0.00ms | 0.15ms | 0.13ms | **Transit/Rust** (367.0x) |
-| **Presence Update** | 0.74ms | 0.01ms | 0.17ms | 0.11ms | **Transit/Rust** (57.7x) |
-| **Content Moderation** | 0.82ms | 0.00ms | 0.13ms | 0.10ms | **Transit/Rust** (360.6x) |
-| **Message Search** | 5.53ms | 1.04ms | 2.88ms | 1.12ms | **Transit/Rust** (5.3x) |
-| **Analytics Pipeline** | 2.74ms | 0.47ms | 1.63ms | 0.59ms | **Transit/Rust** (5.8x) |
-| **Notification Builder** | 1.17ms | 0.01ms | 0.12ms | 0.22ms | **Transit/Rust** (220.6x) |
-| **User Lookup** | 0.67ms | 0.00ms | 0.08ms | 0.16ms | **Transit/Rust** (375.2x) |
-| **Channel History** | 1.74ms | 0.00ms | 0.16ms | 0.22ms | **Transit/Rust** (470.3x) |
+> Hardware: Arch Linux, AMD Ryzen — July 2026
+
+### Computational Benchmark
+
+| Operation | FastAPI | Transit/Rust | Transit/Java | Transit/Python | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub | PyO3 | Winner |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **ETL Pipeline** | 2.06ms | 0.29ms | 0.40ms | 1.13ms | 2.47ms | 2.37ms | 1.40ms | 1.62ms | 1.89ms | 2.10ms | 0.61ms | **Transit/Rust** (7.2x) |
+| **Text Analysis** | 15.78ms | 0.71ms | 0.41ms | 15.24ms | 14.30ms | 26.62ms | 16.84ms | 11.91ms | 11.86ms | 12.16ms | 2.52ms | **Transit/Java** (38.1x) |
+| **Matrix Multiply** | 28.85ms | 1.19ms | 1.24ms | 18.39ms | 20.18ms | 54.59ms | 20.73ms | 18.22ms | 18.27ms | 18.28ms | 3.80ms | **Transit/Rust** (24.2x) |
+| **Matrix Determinant** | 22.72ms | 0.08ms | 0.11ms | 22.10ms | 27.36ms | 37.44ms | 32.84ms | 26.10ms | 25.01ms | 26.19ms | 2.06ms | **Transit/Rust** (283.8x) |
+| **Graph Processing** | 10.55ms | 0.37ms | 0.51ms | 6.95ms | 6.53ms | 13.36ms | 11.51ms | 5.04ms | 6.03ms | 5.56ms | 2.17ms | **Transit/Rust** (28.4x) |
+| **Fibonacci Memo** | 1.14ms | 0.05ms | 0.08ms | 0.19ms | 1.00ms | 0.24ms | 0.19ms | 0.06ms | 0.09ms | 0.55ms | 0.09ms | **Transit/Rust** (22.7x) |
+| **SHA-256 Hashing** | 5.20ms | 0.06ms | 0.16ms | 4.75ms | 5.67ms | 9.19ms | 9.82ms | 4.66ms | 4.89ms | 5.17ms | 0.69ms | **Transit/Rust** (93.8x) |
+
+### Chat Server Benchmark
+
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis | Winner |
+|-----------|---------|--------------|----------------|--------------|------|--------|-----------|------------|--------|-------|--------|
+| Message Send Pipeline | 1.29ms | 0.01ms | 0.17ms | 0.26ms | 0.17ms | 0.13ms | 0.28ms | 0.05ms | 0.11ms | 0.57ms | **Transit/Rust** (117x) |
+| Fan-out Delivery | 0.86ms | 0.01ms | 0.20ms | 0.16ms | 0.25ms | 0.14ms | 0.32ms | 0.05ms | 0.12ms | 0.45ms | **Transit/Rust** (86x) |
+| Session Validation | 0.87ms | 0.00ms | 0.15ms | 0.12ms | 0.19ms | 0.13ms | 0.20ms | 0.04ms | 0.12ms | 0.45ms | **Transit/Rust** (239x) |
+| Typing Indicator | 0.92ms | 0.01ms | 0.13ms | 0.12ms | 0.16ms | 0.10ms | 0.26ms | 0.06ms | 0.10ms | 0.44ms | **Transit/Rust** (166x) |
+| Read Receipt | 0.70ms | 0.00ms | 0.11ms | 0.11ms | 0.16ms | 0.09ms | 0.22ms | 0.04ms | 0.11ms | 0.48ms | **Transit/Rust** (331x) |
+| Presence Update | 0.85ms | 0.02ms | 0.21ms | 0.19ms | 0.13ms | 0.09ms | 0.24ms | 0.05ms | 0.13ms | 0.38ms | **Transit/Rust** (36x) |
+| AI Content Moderation | 0.85ms | 0.00ms | 0.16ms | 0.14ms | 0.12ms | 0.08ms | 0.22ms | 0.04ms | 0.10ms | 0.59ms | **Transit/Rust** (173x) |
+| Message Search | 5.19ms | 1.01ms | 3.71ms | 0.96ms | 1.32ms | 1.21ms | 2.50ms | 2.17ms | 2.74ms | 3.27ms | **Transit/Java** (5.4x) |
+| Analytics Pipeline | 2.72ms | 0.47ms | 1.89ms | 0.59ms | 0.84ms | 0.56ms | 1.19ms | 1.30ms | 1.74ms | 2.11ms | **Transit/Rust** (5.8x) |
+| Notification Builder | 0.98ms | 0.02ms | 0.14ms | 0.18ms | 0.12ms | 0.09ms | 0.22ms | 0.06ms | 0.13ms | 0.50ms | **Transit/Rust** (42x) |
+| User Lookup | 0.74ms | 0.00ms | 0.14ms | 0.12ms | 0.14ms | 0.11ms | 0.25ms | 0.04ms | 0.10ms | 0.53ms | **Transit/Rust** (314x) |
+| Channel History | 1.86ms | 0.00ms | 0.12ms | 0.12ms | 0.09ms | 0.07ms | 0.20ms | 0.05ms | 0.11ms | 0.54ms | **Transit/Rust** (375x) |
+
+## Results (Concurrent — 10 parallel requests)
+
+### Computational Benchmark
+
+| Operation | FastAPI | Transit/Rust | Transit/Java | Transit/Python | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub | PyO3 | Winner |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **ETL Pipeline** | 15.35ms | 1.44ms | 1.89ms | 6.15ms | 13.16ms | 6.55ms | 4.45ms | 1.95ms | 1.26ms | 3.65ms | 1.08ms | **PyO3** (14.2x) |
+| **Text Analysis** | 131.42ms | 3.61ms | 3.99ms | 235.37ms | 177.89ms | 174.62ms | 168.55ms | 64.48ms | 6.38ms | 61.35ms | 9.90ms | **Transit/Rust** (36.4x) |
+| **Matrix Multiply** | 227.63ms | 5.83ms | 7.24ms | 236.01ms | 222.78ms | 239.70ms | 214.76ms | 77.20ms | 10.55ms | 80.37ms | 17.94ms | **Transit/Rust** (39.0x) |
+| **Matrix Determinant** | 200.48ms | 0.54ms | 1.91ms | 381.61ms | 369.21ms | 400.01ms | 339.41ms | 142.29ms | 8.91ms | 157.44ms | 10.77ms | **Transit/Rust** (374.5x) |
+| **Graph Processing** | 91.94ms | 2.07ms | 3.32ms | 108.39ms | 63.66ms | 56.09ms | 42.31ms | 28.29ms | 2.45ms | 30.37ms | 7.19ms | **Transit/Rust** (44.3x) |
+| **Fibonacci Memo** | 4.30ms | 0.11ms | 1.77ms | 0.71ms | 3.40ms | 1.50ms | 0.71ms | 0.10ms | 0.09ms | 1.01ms | 0.15ms | **ZeroMQ** (46.6x) |
+| **SHA-256 Hashing** | 46.42ms | 0.26ms | 1.86ms | 65.39ms | 54.91ms | 46.18ms | 27.70ms | 28.49ms | 1.71ms | 28.53ms | 4.68ms | **Transit/Rust** (180.1x) |
 
 ## Directory Structure
 
 ```
 benchmark/
-├── run-all.sh                    # Top-level runner
-├── generate-grpc.sh              # Generate gRPC code
-├── computational/                # Computational benchmark
-│   ├── run.sh                   # Standalone runner
-│   ├── run-benchmark.js         # Node.js orchestrator
-│   ├── analyze-results.py       # Results analysis script
-│   ├── package.json             # Dependencies
-│   ├── README.md               # Detailed documentation
-│   ├── fastapi/                 # FastAPI implementation
-│   ├── transit/                 # Transit implementations
-│   │   ├── rust/               # Rust native addon
-│   │   ├── python/             # Python TCP server
-│   │   └── java/               # Java TCP server
-│   ├── grpc/                   # gRPC implementation
-│   ├── thrift/                 # Apache Thrift implementation
-│   ├── unix-socket/            # Unix domain socket implementation
-│   ├── subprocess/             # Subprocess stdin/stdout implementation
-│   ├── pyo3/                   # PyO3 implementation
-│   ├── zeromq/                 # ZeroMQ implementation
-│   ├── redis-pubsub/           # Redis Pub/Sub implementation
-│   └── results/               # Benchmark results
-├── chat-server/                 # Chat server benchmark
-│   ├── run.sh                   # Standalone runner
-│   ├── run-benchmark.js         # Node.js orchestrator
-│   ├── package.json             # Dependencies
-│   ├── README.md               # Detailed documentation
-│   ├── fastapi/                 # FastAPI implementation
-│   ├── transit/                 # Transit implementations
-│   │   ├── rust/               # Rust native addon
-│   │   ├── python/             # Python TCP server
-│   │   └── java/               # Java TCP server
-│   ├── grpc/                   # gRPC implementation
-│   ├── thrift/                 # Apache Thrift implementation
-│   ├── unix-socket/            # Unix domain socket implementation
-│   ├── subprocess/             # Subprocess stdin/stdout implementation
-│   ├── zeromq/                 # ZeroMQ implementation
-│   ├── redis-pubsub/           # Redis Pub/Sub implementation
-│   └── results/               # Benchmark results
-└── README.md                    # This file
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js >= 20
-- Rust toolchain
-- Java JDK 21+
-- Python 3.10+
-- Redis (for Redis Pub/Sub benchmark)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd <repository-directory>
-
-# Run all benchmarks
-./benchmark/run-all.sh
-```
-
-### Running Individual Benchmarks
-
-```bash
-# Run computational benchmark
-cd benchmark/computational
-npm install
-npm run setup
-npm run benchmark
-
-# Run chat server benchmark
-cd benchmark/chat-server
-npm install
-npm run setup
-npm run benchmark
-```
-
-### Run Mode Flags
-
-Each `run.sh` script supports mode flags:
-
-```bash
-# Run only serial benchmarks (100 iterations)
-./run.sh --serial-only
-
-# Run only concurrent benchmarks (10 parallel requests)
-./run.sh --concurrent-only
-```
-
-### Top-Level Runner Options
-
-```bash
-./benchmark/run-all.sh --computational-only   # Run only computational
-./benchmark/run-all.sh --chat-only            # Run only chat server
-./benchmark/run-all.sh --serial-only          # Run serial tests only
-./benchmark/run-all.sh --concurrent-only      # Run concurrent tests only
+├── README.md                    # This file
+├── .gitignore
+├── benchmark/
+│   ├── run-all.sh              # Top-level runner
+│   ├── generate-grpc.sh        # Generate gRPC code
+│   ├── clients.mjs             # Shared backend clients
+│   └── computational/          # Computational benchmark
+│       ├── run.sh              # Standalone runner
+│       ├── run-benchmark.js    # Node.js orchestrator
+│       ├── package.json        # Dependencies
+│       ├── fastapi/            # FastAPI implementation
+│       ├── transit/            # Transit implementations
+│       │   ├── rust/           # Rust native addon
+│       │   ├── python/         # Python TCP server
+│       │   └── java/           # Java TCP server
+│       ├── grpc/               # gRPC implementation
+│       ├── thrift/             # Apache Thrift implementation
+│       ├── unix-socket/        # Unix domain socket implementation
+│       ├── subprocess/         # Subprocess stdin/stdout implementation
+│       ├── pyo3/               # PyO3 implementation
+│       ├── zeromq/             # ZeroMQ implementation
+│       ├── redis-pubsub/       # Redis Pub/Sub implementation
+│       └── results/            # Benchmark results
+└── chat-server-benchmark/      # Chat server benchmark
+    ├── run.sh                  # Standalone runner
+    ├── run-benchmark.js        # Node.js orchestrator
+    ├── package.json            # Dependencies
+    ├── shared/                 # Shared computations
+    ├── clients.mjs             # Backend clients
+    ├── fastapi/                # FastAPI implementation
+    ├── transit/                # Transit implementations
+    │   ├── rust/               # Rust native addon
+    │   ├── python/             # Python TCP server
+    │   └── java/               # Java TCP server
+    ├── grpc/                   # gRPC implementation
+    ├── thrift/                 # Apache Thrift implementation
+    ├── unix-socket/            # Unix domain socket implementation
+    ├── subprocess/             # Subprocess stdin/stdout implementation
+    ├── zeromq/                 # ZeroMQ implementation
+    ├── redis-pubsub/           # Redis Pub/Sub implementation
+    └── results/                # Benchmark results
 ```
 
 ## Output
@@ -208,6 +231,8 @@ Each benchmark run generates:
 - **`results/benchmark-{timestamp}.json`** — Full machine-readable results with latency stats (min, max, mean, p50, p95, p99), throughput (ops/sec), error counts, and per-benchmark breakdowns.
 
 - **`results/benchmark.log`** — Human-readable summary table with mean latency per operation and a winner breakdown.
+
+- **`results/benchmark.md`** — Markdown report with tables for easy sharing.
 
 ### Analysis Script
 
@@ -250,26 +275,6 @@ Cost of calling between languages:
 - **ops/sec** — Throughput capacity
 - **errors** — Should be 0 (any errors indicate bugs)
 
-## Key Metrics to Watch
-
-### Computational Benchmark
-
-| Metric | What It Tells You |
-|--------|-------------------|
-| Matrix Multiply mean | CPU-bound computation speed |
-| Graph Processing p95 | Algorithmic complexity handling |
-| Fibonacci Memo ops/sec | Recursive computation throughput |
-
-### Chat Server Benchmark
-
-| Metric | What It Tells You |
-|--------|-------------------|
-| Message Pipeline mean | End-to-end message delivery speed |
-| Fan-out p95 | Worst-case group chat experience |
-| Session Validation ops/sec | Maximum request throughput |
-| Content Moderation mean | ML inference overhead |
-| Concurrent scaling ratio | How well the system handles load |
-
 ## Architecture
 
 ### Transit vs Traditional IPC
@@ -310,10 +315,3 @@ JS → transit.rs.routeMessage(...)
 ## License
 
 See the LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Open an issue on GitHub
-- Check the documentation in each benchmark directory
-- Review the generated benchmark results for detailed analysis

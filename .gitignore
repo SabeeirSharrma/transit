@@ -36,29 +36,11 @@ benchmark/chat-server/subprocess/.venv/
 benchmark/chat-server/zeromq/.venv/
 benchmark/chat-server/redis-pubsub/.venv/
 
-chat-server-benchmark/fastapi/.venv/
-chat-server-benchmark/transit/rust/target/
-chat-server-benchmark/transit/rust/index.node
-chat-server-benchmark/transit/java/build/
-chat-server-benchmark/grpc/.venv/
-chat-server-benchmark/thrift/.venv/
-chat-server-benchmark/unix-socket/.venv/
-chat-server-benchmark/subprocess/.venv/
-chat-server-benchmark/zeromq/.venv/
-chat-server-benchmark/redis-pubsub/.venv/
-
-# Generated thrift code
-chat-server-benchmark/thrift/chat_thrift/
-
-# Old directories (removed)
-computational-benchmark/
-
 # Generated protobuf files
 *_pb2.py
 *_pb2_grpc.py
 
 # Generated thrift code
-thrift/gen-py/
 **/gen-py/
 
 # Python virtual environments
