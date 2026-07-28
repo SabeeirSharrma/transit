@@ -60,20 +60,21 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 
 #### Chat Server Results (Serial — single request, 100 iterations)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Winner |
-|-----------|---------|--------------|----------------|--------------|--------|
-| **Message Send Pipeline** | 0.91ms | 0.00ms | 0.22ms | 0.31ms | **Transit/Rust** (237.3x) |
-| **Fan-out Delivery** | 1.23ms | 0.02ms | 0.29ms | 0.12ms | **Transit/Rust** (54.4x) |
-| **Session Validation** | 0.75ms | 0.00ms | 0.19ms | 0.14ms | **Transit/Rust** (215.6x) |
-| **Typing Indicator** | 0.83ms | 0.00ms | 0.12ms | 0.14ms | **Transit/Rust** (456.5x) |
-| **Read Receipt** | 0.76ms | 0.00ms | 0.15ms | 0.13ms | **Transit/Rust** (367.0x) |
-| **Presence Update** | 0.74ms | 0.01ms | 0.17ms | 0.11ms | **Transit/Rust** (57.7x) |
-| **Content Moderation** | 0.82ms | 0.00ms | 0.13ms | 0.10ms | **Transit/Rust** (360.6x) |
-| **Message Search** | 5.53ms | 1.04ms | 2.88ms | 1.12ms | **Transit/Rust** (5.3x) |
-| **Analytics Pipeline** | 2.74ms | 0.47ms | 1.63ms | 0.59ms | **Transit/Rust** (5.8x) |
-| **Notification Builder** | 1.17ms | 0.01ms | 0.12ms | 0.22ms | **Transit/Rust** (220.6x) |
-| **User Lookup** | 0.67ms | 0.00ms | 0.08ms | 0.16ms | **Transit/Rust** (375.2x) |
-| **Channel History** | 1.74ms | 0.00ms | 0.16ms | 0.22ms | **Transit/Rust** (470.3x) |
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
+|-----------|---------|--------------|----------------|--------------|------|--------|-----------|------------|--------|-------|--------|
+| Message Send Pipeline (auth+mod+route+persist) | 1.29ms | 0.01ms | 0.17ms | 0.26ms | 0.17ms | 0.13ms | 0.28ms | 0.05ms | 0.11ms | 0.57ms | **Transit/Rust** (117.3x faster) |
+| Fan-out Delivery (50 recipients) | 0.86ms | 0.01ms | 0.20ms | 0.16ms | 0.25ms | 0.14ms | 0.32ms | 0.05ms | 0.12ms | 0.45ms | **Transit/Rust** (85.9x faster) |
+| Session Validation | 0.87ms | 0.00ms | 0.15ms | 0.12ms | 0.19ms | 0.13ms | 0.20ms | 0.04ms | 0.12ms | 0.45ms | **Transit/Rust** (238.6x faster) |
+| Typing Indicator | 0.92ms | 0.01ms | 0.13ms | 0.12ms | 0.16ms | 0.10ms | 0.26ms | 0.06ms | 0.10ms | 0.44ms | **Transit/Rust** (166.3x faster) |
+| Read Receipt | 0.70ms | 0.00ms | 0.11ms | 0.11ms | 0.16ms | 0.09ms | 0.22ms | 0.04ms | 0.11ms | 0.48ms | **Transit/Rust** (331.0x faster) |
+| Presence Update (30 contacts) | 0.85ms | 0.02ms | 0.21ms | 0.19ms | 0.13ms | 0.09ms | 0.24ms | 0.05ms | 0.13ms | 0.38ms | **Transit/Rust** (36.0x faster) |
+| AI Content Moderation | 0.85ms | 0.00ms | 0.16ms | 0.14ms | 0.12ms | 0.08ms | 0.22ms | 0.04ms | 0.10ms | 0.59ms | **Transit/Rust** (173.2x faster) |
+| Message Search (1000 messages) | 5.19ms | 1.01ms | 3.71ms | 0.96ms | 1.32ms | 1.21ms | 2.50ms | 2.17ms | 2.74ms | 3.27ms | **Transit/Java** (5.4x faster) |
+| Analytics Pipeline (500 events) | 2.72ms | 0.47ms | 1.89ms | 0.59ms | 0.84ms | 0.56ms | 1.19ms | 1.30ms | 1.74ms | 2.11ms | **Transit/Rust** (5.8x faster) |
+| Notification Builder (20 users) | 0.98ms | 0.02ms | 0.14ms | 0.18ms | 0.12ms | 0.09ms | 0.22ms | 0.06ms | 0.13ms | 0.50ms | **Transit/Rust** (42.5x faster) |
+| User Lookup | 0.74ms | 0.00ms | 0.14ms | 0.12ms | 0.14ms | 0.11ms | 0.25ms | 0.04ms | 0.10ms | 0.53ms | **Transit/Rust** (313.5x faster) |
+| Channel History (50 messages) | 1.86ms | 0.00ms | 0.12ms | 0.12ms | 0.09ms | 0.07ms | 0.20ms | 0.05ms | 0.11ms | 0.54ms | **Transit/Rust** (374.9x faster) |
+
 
 ## Quick Start
 
