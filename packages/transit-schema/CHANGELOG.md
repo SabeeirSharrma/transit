@@ -1,5 +1,11 @@
 # @sabeeirsharrma/schema
 
+## 2.2.0
+
+### Minor Changes
+
+- Fix python socket loop bug due to port mismatch with nodejs
+
 ## 2.1.0
 
 ### Minor Changes

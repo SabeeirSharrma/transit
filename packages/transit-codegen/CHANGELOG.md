@@ -1,5 +1,16 @@
 # @sabeeirsharrma/codegen
 
+## 2.2.0
+
+### Minor Changes
+
+- Fix python socket loop bug due to port mismatch with nodejs
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/schema@2.2.0
+
 ## 2.1.0
 
 ### Minor Changes

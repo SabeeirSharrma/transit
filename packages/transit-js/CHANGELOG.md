@@ -1,5 +1,19 @@
 # transit
 
+## 2.2.0
+
+### Minor Changes
+
+- Fix python socket loop bug due to port mismatch with nodejs
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/java-runtime@2.2.0
+  - @sabeeirsharrma/python-runtime@2.2.0
+  - @sabeeirsharrma/scanner@2.2.0
+  - @sabeeirsharrma/schema@2.2.0
+
 ## 2.1.0
 
 ### Minor Changes
