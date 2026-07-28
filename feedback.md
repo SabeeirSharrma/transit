@@ -183,7 +183,7 @@ The `PythonProcessManager` in `@sabeeirsharrma/python-runtime` **already support
 
 ## Resolution: Thread Pool Deadlock (Fixed 2026-07-28)
 
-The thread pool deadlock was fixed by handling `_handle_call` inline instead of submitting to the executor. See "Issue: Thread Pool Deadlock in Python Service" below.
+The thread pool deadlock was fixed by using a **separate executor** for `_handle_call` tasks. See "Issue: Thread Pool Deadlock in Python Service" below.
 
 ---
 
@@ -245,9 +245,9 @@ When a request arrives and `_handle_client` submits `_handle_call` to the same e
 
 ---
 
-### Fix: Handle Calls Inline
+### Fix: Separate Executor for Call Handling
 
-Call `_handle_call` directly from `_handle_client` instead of submitting to the executor. Each connection processes requests sequentially (Node.js awaits each call), so there's no need for concurrent dispatch.
+Use a **separate `ThreadPoolExecutor`** for `_handle_call` tasks. This ensures call processing is never blocked by connection handling.
 
 **Files changed:**
 - `benchmark/benchmark/chat-server/transit/python/service.py`
@@ -258,13 +258,18 @@ Call `_handle_call` directly from `_handle_client` instead of submitting to the 
 
 ```python
 # BEFORE (deadlock-prone):
-if msg_type == TYPE_CALL_REQUEST:
-    self._executor.submit(self._handle_call, payload, request_id, client)
+self._executor = ThreadPoolExecutor(max_workers=...)
 
-# AFTER (inline, no deadlock):
-if msg_type == TYPE_CALL_REQUEST:
-    self._handle_call(payload, request_id, client)
+# In _handle_client:
+self._executor.submit(self._handle_call, payload, request_id, client)
+
+# AFTER (separate executors, no deadlock):
+self._executor = ThreadPoolExecutor(max_workers=...)      # for _handle_client
+self._call_executor = ThreadPoolExecutor(max_workers=...) # for _handle_call
+
+# In _handle_client:
+self._call_executor.submit(self._handle_call, payload, request_id, client)
 ```
 
-**Pros:** Eliminates deadlock entirely. Simpler code. No performance regression (requests were already serial).
-**Cons:** Removes request pipelining support (not used by the benchmark anyway).
+**Pros:** Eliminates deadlock entirely. Preserves request pipelining and concurrency. No performance regression.
+**Cons:** Uses more threads (2× executor workers). Acceptable for IPC servers.

@@ -110,6 +110,7 @@ class TransitServer:
         self._socket_path = None  # set when using UDS
         self._running = False
         self._executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
+        self._call_executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
         self._lock = threading.Lock()
 
     @property
@@ -208,6 +209,7 @@ class TransitServer:
                 pass
         self._cleanup_socket_file()
         self._executor.shutdown(wait=False)
+        self._call_executor.shutdown(wait=False)
         print("[transit-py] Server stopped", file=sys.stderr)
 
     def _cleanup_socket_file(self):
@@ -221,11 +223,10 @@ class TransitServer:
     def _handle_client(self, client):
         """Handle a single client connection.
 
-        Reads requests sequentially and processes CALL_REQUESTs inline.
-        Handles calls inline to avoid deadlock: _handle_client runs on the
-        executor, so submitting _handle_call to the same executor can
-        deadlock when all workers are occupied by _handle_client tasks
-        from the connection pool.
+        Reads requests sequentially and dispatches CALL_REQUESTs to a
+        separate call executor to avoid deadlock. The call executor is
+        independent from the connection executor, so _handle_call tasks
+        are not blocked by _handle_client tasks.
         """
         try:
             # TCP_NODELAY only applies to TCP sockets, not UDS
@@ -250,9 +251,11 @@ class TransitServer:
                     # Read payload
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
 
-                    # Handle inline to avoid thread pool deadlock
+                    # Dispatch to separate call executor (avoids deadlock)
                     if msg_type == TYPE_CALL_REQUEST:
-                        self._handle_call(payload, request_id, client)
+                        self._call_executor.submit(
+                            self._handle_call, payload, request_id, client
+                        )
                     elif msg_type == TYPE_HEALTH_PING:
                         self._handle_health_ping(request_id, client)
                     else:
