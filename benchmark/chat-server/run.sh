@@ -20,6 +20,7 @@ usage() {
     echo "  - Rust toolchain"
     echo "  - Java JDK 21+"
     echo "  - Python 3.10+"
+    echo "  - Redis (for Redis Pub/Sub benchmark, optional)"
 }
 
 MODE="both"
@@ -61,6 +62,27 @@ npm run build:java
 echo "Installing FastAPI dependencies..."
 npm run install:fastapi
 
+# Check if Redis is available (optional)
+REDIS_PID=""
+if command -v redis-server >/dev/null 2>&1; then
+    if ! redis-cli ping >/dev/null 2>&1; then
+        echo "Starting Redis server..."
+        redis-server --daemonize yes --port 6379 --loglevel warning
+        REDIS_PID=$!
+        sleep 1
+        if redis-cli ping >/dev/null 2>&1; then
+            echo "✓ Redis ready on port 6379"
+        else
+            echo "⚠ Redis failed to start, skipping Redis Pub/Sub benchmark"
+            REDIS_PID=""
+        fi
+    else
+        echo "✓ Redis already running"
+    fi
+else
+    echo "⚠ Redis not found, skipping Redis Pub/Sub benchmark"
+fi
+
 # Run benchmark
 echo "Running benchmark..."
 if [ "$MODE" = "both" ]; then
@@ -69,6 +91,12 @@ elif [ "$MODE" = "serial" ]; then
     npm run benchmark -- --serial
 elif [ "$MODE" = "concurrent" ]; then
     npm run benchmark -- --concurrent
+fi
+
+# Stop Redis if we started it
+if [ -n "$REDIS_PID" ]; then
+    echo "Stopping Redis..."
+    redis-cli shutdown 2>/dev/null || true
 fi
 
 echo ""

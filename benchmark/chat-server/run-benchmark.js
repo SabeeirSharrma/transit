@@ -29,6 +29,14 @@ import fs from "node:fs";
 
 const __dirname = import.meta.dirname;
 const RESULTS_DIR = resolve(__dirname, "./results");
+
+// ─── CLI Argument Parsing ────────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+const MODE = args.includes("--serial") ? "serial"
+           : args.includes("--concurrent") ? "concurrent"
+           : "both";
+
 const ITERATIONS = 100;
 const WARMUP = 10;
 const CONCURRENT = 10;
@@ -481,9 +489,12 @@ async function main() {
 
   console.log("✓ All Transit services ready\n");
 
+  console.log(transit.info());
+
   // ── Run benchmarks ──
   const results = {
     timestamp: new Date().toISOString(),
+    mode: MODE,
     iterations: ITERATIONS,
     warmup: WARMUP,
     concurrency: CONCURRENT,
@@ -496,79 +507,102 @@ async function main() {
     categories[b.category].push([key, b]);
   }
 
-  for (const [category, benchmarks] of Object.entries(categories)) {
-    console.log(`\n${"═".repeat(70)}`);
-    console.log(`  ${category.toUpperCase()} — ${benchmarks[0]?.[1]?.description || ""}`);
-    console.log(`${"═".repeat(70)}`);
+  // ── Serial benchmarks ──
+  if (MODE === "both" || MODE === "serial") {
+    for (const [category, benchmarks] of Object.entries(categories)) {
+      console.log(`\n${"═".repeat(70)}`);
+      console.log(`  ${category.toUpperCase()} — ${benchmarks[0]?.[1]?.description || ""}`);
+      console.log(`${"═".repeat(70)}`);
 
-    for (const [key, benchmark] of benchmarks) {
-      console.log(`\n  ── ${benchmark.name} ──`);
+      for (const [key, benchmark] of benchmarks) {
+        console.log(`\n  ── ${benchmark.name} ──`);
 
-      // FastAPI baseline
-      process.stdout.write("    FastAPI (JSON)     ... ");
-      const fastapiResult = await runBenchmark(benchmark, "fastapi", { fastapi_port: 8000 });
-      console.log(`${fastapiResult.mean.toFixed(2)}ms avg, ${fastapiResult.ops_per_sec.toFixed(1)} ops/s (p95: ${fastapiResult.p95.toFixed(2)}ms)`);
+        try {
+          // FastAPI baseline
+          process.stdout.write("    FastAPI (JSON)     ... ");
+          const fastapiResult = await runBenchmark(benchmark, "fastapi", { fastapi_port: 8000 });
+          console.log(`${fastapiResult.mean.toFixed(2)}ms avg, ${fastapiResult.ops_per_sec.toFixed(1)} ops/s (p95: ${fastapiResult.p95.toFixed(2)}ms)`);
 
-      // Transit Rust
-      process.stdout.write("    Transit/Rust       ... ");
-      const rustResult = await runBenchmark(benchmark, "transit", { transitClient: rs });
-      console.log(`${rustResult.mean.toFixed(2)}ms avg, ${rustResult.ops_per_sec.toFixed(1)} ops/s (p95: ${rustResult.p95.toFixed(2)}ms)`);
+          // Transit Rust
+          process.stdout.write("    Transit/Rust       ... ");
+          const rustResult = await runBenchmark(benchmark, "transit", { transitClient: rs });
+          console.log(`${rustResult.mean.toFixed(2)}ms avg, ${rustResult.ops_per_sec.toFixed(1)} ops/s (p95: ${rustResult.p95.toFixed(2)}ms)`);
 
-      // Transit Python
-      process.stdout.write("    Transit/Python     ... ");
-      const pyResult = await runBenchmark(benchmark, "transit", { transitClient: py });
-      console.log(`${pyResult.mean.toFixed(2)}ms avg, ${pyResult.ops_per_sec.toFixed(1)} ops/s (p95: ${pyResult.p95.toFixed(2)}ms)`);
+          // Transit Python
+          process.stdout.write("    Transit/Python     ... ");
+          const pyResult = await runBenchmark(benchmark, "transit", { transitClient: py });
+          console.log(`${pyResult.mean.toFixed(2)}ms avg, ${pyResult.ops_per_sec.toFixed(1)} ops/s (p95: ${pyResult.p95.toFixed(2)}ms)`);
 
-      // Transit Java
-      let javaResult = null;
-      if (jv) {
-        process.stdout.write("    Transit/Java       ... ");
-        javaResult = await runBenchmark(benchmark, "transit", { transitClient: jv });
-        console.log(`${javaResult.mean.toFixed(2)}ms avg, ${javaResult.ops_per_sec.toFixed(1)} ops/s (p95: ${javaResult.p95.toFixed(2)}ms)`);
+          // Transit Java
+          let javaResult = null;
+          if (jv) {
+            process.stdout.write("    Transit/Java       ... ");
+            javaResult = await runBenchmark(benchmark, "transit", { transitClient: jv });
+            console.log(`${javaResult.mean.toFixed(2)}ms avg, ${javaResult.ops_per_sec.toFixed(1)} ops/s (p95: ${javaResult.p95.toFixed(2)}ms)`);
+          }
+
+          results.benchmarks[key] = {
+            name: benchmark.name,
+            category: benchmark.category,
+            fastapi: fastapiResult,
+            transit: { rust: rustResult, python: pyResult, java: javaResult },
+          };
+        } catch (e) {
+          console.error(`\n    ERROR: ${e.message}`);
+          results.benchmarks[key] = {
+            name: benchmark.name,
+            category: benchmark.category,
+            error: e.message,
+          };
+        }
       }
-
-      results.benchmarks[key] = {
-        name: benchmark.name,
-        category: benchmark.category,
-        fastapi: fastapiResult,
-        transit: { rust: rustResult, python: pyResult, java: javaResult },
-      };
     }
   }
 
   // ── Concurrent benchmarks ──
-  console.log(`\n${"═".repeat(70)}`);
-  console.log(`  CONCURRENT BENCHMARKS (${CONCURRENT} parallel requests)`);
-  console.log(`${"═".repeat(70)}\n`);
+  if (MODE === "both" || MODE === "concurrent") {
+    console.log(`\n${"═".repeat(70)}`);
+    console.log(`  CONCURRENT BENCHMARKS (${CONCURRENT} parallel requests)`);
+    console.log(`${"═".repeat(70)}\n`);
 
-  for (const [key, benchmark] of Object.entries(BENCHMARKS)) {
-    console.log(`\n  ── ${benchmark.name} (concurrent) ──`);
+    for (const [key, benchmark] of Object.entries(BENCHMARKS)) {
+      console.log(`\n  ── ${benchmark.name} (concurrent) ──`);
 
-    process.stdout.write("    FastAPI (JSON)     ... ");
-    const fastapiConc = await runConcurrentBenchmark(benchmark, "fastapi", { fastapi_port: 8000 }, CONCURRENT);
-    console.log(`${fastapiConc.mean.toFixed(2)}ms avg, ${fastapiConc.ops_per_sec.toFixed(1)} ops/s`);
+      try {
+        process.stdout.write("    FastAPI (JSON)     ... ");
+        const fastapiConc = await runConcurrentBenchmark(benchmark, "fastapi", { fastapi_port: 8000 }, CONCURRENT);
+        console.log(`${fastapiConc.mean.toFixed(2)}ms avg, ${fastapiConc.ops_per_sec.toFixed(1)} ops/s`);
 
-    process.stdout.write("    Transit/Rust       ... ");
-    const rustConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: rs }, CONCURRENT);
-    console.log(`${rustConc.mean.toFixed(2)}ms avg, ${rustConc.ops_per_sec.toFixed(1)} ops/s`);
+        process.stdout.write("    Transit/Rust       ... ");
+        const rustConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: rs }, CONCURRENT);
+        console.log(`${rustConc.mean.toFixed(2)}ms avg, ${rustConc.ops_per_sec.toFixed(1)} ops/s`);
 
-    process.stdout.write("    Transit/Python     ... ");
-    const pyConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: py }, CONCURRENT);
-    console.log(`${pyConc.mean.toFixed(2)}ms avg, ${pyConc.ops_per_sec.toFixed(1)} ops/s`);
+        process.stdout.write("    Transit/Python     ... ");
+        const pyConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: py }, CONCURRENT);
+        console.log(`${pyConc.mean.toFixed(2)}ms avg, ${pyConc.ops_per_sec.toFixed(1)} ops/s`);
 
-    let javaConc = null;
-    if (jv) {
-      process.stdout.write("    Transit/Java       ... ");
-      javaConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: jv }, CONCURRENT);
-      console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
+        let javaConc = null;
+        if (jv) {
+          process.stdout.write("    Transit/Java       ... ");
+          javaConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: jv }, CONCURRENT);
+          console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
+        }
+
+        if (results.benchmarks[key]) {
+          results.benchmarks[key].concurrent = {
+            fastapi: fastapiConc,
+            rust: rustConc,
+            python: pyConc,
+            java: javaConc,
+          };
+        }
+      } catch (e) {
+        console.error(`\n    ERROR: ${e.message}`);
+        if (results.benchmarks[key]) {
+          results.benchmarks[key].concurrent_error = e.message;
+        }
+      }
     }
-
-    results.benchmarks[key].concurrent = {
-      fastapi: fastapiConc,
-      rust: rustConc,
-      python: pyConc,
-      java: javaConc,
-    };
   }
 
   // ── Save results ──
@@ -604,6 +638,11 @@ function printSummary(results) {
   const rows = [];
 
   for (const [key, data] of Object.entries(results.benchmarks)) {
+    if (data.error) {
+      rows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", data.error]);
+      continue;
+    }
+
     const ft = data.fastapi?.mean || Infinity;
     const rt = data.transit?.rust?.mean || Infinity;
     const pt = data.transit?.python?.mean || Infinity;
@@ -645,7 +684,12 @@ function printSummary(results) {
 
   const concRows = [];
   for (const [key, data] of Object.entries(results.benchmarks)) {
-    if (!data.concurrent) continue;
+    if (!data.concurrent) {
+      if (data.concurrent_error) {
+        concRows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", data.concurrent_error]);
+      }
+      continue;
+    }
 
     const ft = data.concurrent.fastapi?.mean || Infinity;
     const rt = data.concurrent.rust?.mean || Infinity;

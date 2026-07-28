@@ -464,7 +464,11 @@ class TransitServer:
                         break
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
                     if msg_type == TYPE_CALL_REQUEST:
-                        self._executor.submit(self._handle_call, payload, request_id, client)
+                        # Handle inline to avoid deadlock: _handle_client runs on
+                        # the executor, so submitting _handle_call to the same
+                        # executor can deadlock when all workers are occupied by
+                        # _handle_client tasks from the connection pool.
+                        self._handle_call(payload, request_id, client)
                     elif msg_type == TYPE_HEALTH_PING:
                         resp = struct.pack(HEADER_FORMAT, PROTOCOL_VERSION, TYPE_HEALTH_PONG, request_id, 0)
                         client.sendall(resp)
@@ -500,8 +504,7 @@ class TransitServer:
                              PROTOCOL_VERSION, TYPE_CALL_RESPONSE, request_id, 1 + 4 + len(result_bytes))
             struct.pack_into("<BI", resp, HEADER_SIZE, status, len(result_bytes))
             resp[HEADER_SIZE + 5:] = result_bytes
-            with self._write_lock:
-                client.sendall(resp)
+            client.sendall(resp)
         except Exception as e:
             print(f"[benchmark-py] Call error: {e}", file=sys.stderr)
 
