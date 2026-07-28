@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package chat;
+
+service ChatService {
+  rpc SendMessagePipeline (SendMessageRequest) returns (SendMessageResponse);
+  rpc FanoutDelivery (FanoutRequest) returns (FanoutResponse);
+  rpc ValidateSession (SessionRequest) returns (SessionResponse);
+  rpc ProcessTypingIndicator (TypingRequest) returns (TypingResponse);
+  rpc ProcessReadReceipt (ReadReceiptRequest) returns (ReadReceiptResponse);
+  rpc UpdatePresence (PresenceRequest) returns (PresenceResponse);
+  rpc ModerateContent (ModerateRequest) returns (ModerateResponse);
+  rpc SearchMessages (SearchRequest) returns (SearchResponse);
+  rpc ProcessAnalytics (AnalyticsRequest) returns (AnalyticsResponse);
+  rpc BuildNotifications (NotificationRequest) returns (NotificationResponse);
+  rpc LookupUser (UserLookupRequest) returns (UserLookupResponse);
+  rpc GetChannelHistory (ChannelHistoryRequest) returns (ChannelHistoryResponse);
+  rpc Compute (ComputeRequest) returns (ComputeResponse);
+}
+
+message ComputeRequest {
+  string operation = 1;
+  bytes payload = 2;
+}
+
+message ComputeResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message SendMessageRequest {
+  string message = 1;
+  string sender_id = 2;
+  string channel_id = 3;
+  string token = 4;
+}
+
+message SendMessageResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message FanoutRequest {
+  string message = 1;
+  string user_ids_json = 2;
+}
+
+message FanoutResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message SessionRequest {
+  string token = 1;
+  string user_id = 2;
+}
+
+message SessionResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message TypingRequest {
+  string user_id = 1;
+  string channel_id = 2;
+  bool is_typing = 3;
+}
+
+message TypingResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message ReadReceiptRequest {
+  string message_id = 1;
+  string user_id = 2;
+  string channel_id = 3;
+}
+
+message ReadReceiptResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message PresenceRequest {
+  string user_id = 1;
+  string status = 2;
+  string contacts_json = 3;
+}
+
+message PresenceResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message ModerateRequest {
+  string text = 1;
+  string user_id = 2;
+}
+
+message ModerateResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message SearchRequest {
+  string query = 1;
+  string messages_json = 2;
+}
+
+message SearchResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message AnalyticsRequest {
+  string events_json = 1;
+}
+
+message AnalyticsResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message NotificationRequest {
+  string users_json = 1;
+  string event_type = 2;
+}
+
+message NotificationResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message UserLookupRequest {
+  string user_id = 1;
+}
+
+message UserLookupResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}
+
+message ChannelHistoryRequest {
+  string channel_id = 1;
+  int32 limit = 2;
+}
+
+message ChannelHistoryResponse {
+  bytes result = 1;
+  double execution_time_ms = 2;
+}

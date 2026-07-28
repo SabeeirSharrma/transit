@@ -79,6 +79,23 @@ Simulates real-world chat server workloads:
 | **User Lookup** | Fetch user from store | Database lookup |
 | **Channel History** | Fetch recent messages | Message retrieval |
 
+## Chat Server Results (Serial — single request, 100 iterations)
+
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Winner |
+|-----------|---------|--------------|----------------|--------------|--------|
+| **Message Send Pipeline** | 0.91ms | 0.00ms | 0.22ms | 0.31ms | **Transit/Rust** (237.3x) |
+| **Fan-out Delivery** | 1.23ms | 0.02ms | 0.29ms | 0.12ms | **Transit/Rust** (54.4x) |
+| **Session Validation** | 0.75ms | 0.00ms | 0.19ms | 0.14ms | **Transit/Rust** (215.6x) |
+| **Typing Indicator** | 0.83ms | 0.00ms | 0.12ms | 0.14ms | **Transit/Rust** (456.5x) |
+| **Read Receipt** | 0.76ms | 0.00ms | 0.15ms | 0.13ms | **Transit/Rust** (367.0x) |
+| **Presence Update** | 0.74ms | 0.01ms | 0.17ms | 0.11ms | **Transit/Rust** (57.7x) |
+| **Content Moderation** | 0.82ms | 0.00ms | 0.13ms | 0.10ms | **Transit/Rust** (360.6x) |
+| **Message Search** | 5.53ms | 1.04ms | 2.88ms | 1.12ms | **Transit/Rust** (5.3x) |
+| **Analytics Pipeline** | 2.74ms | 0.47ms | 1.63ms | 0.59ms | **Transit/Rust** (5.8x) |
+| **Notification Builder** | 1.17ms | 0.01ms | 0.12ms | 0.22ms | **Transit/Rust** (220.6x) |
+| **User Lookup** | 0.67ms | 0.00ms | 0.08ms | 0.16ms | **Transit/Rust** (375.2x) |
+| **Channel History** | 1.74ms | 0.00ms | 0.16ms | 0.22ms | **Transit/Rust** (470.3x) |
+
 ## Directory Structure
 
 ```

@@ -1,0 +1,30 @@
+{
+  "name": "chat-server-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "transit-cli": "^2.4.0",
+    "@sabeeirsharrma/transit": "^2.4.0",
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.0",
+    "zeromq": "^6.0.0-beta.16",
+    "ioredis": "^5.3.2"
+  },
+  "scripts": {
+    "benchmark": "node run-benchmark.js",
+    "benchmark:serial": "node run-benchmark.js --serial",
+    "benchmark:concurrent": "node run-benchmark.js --concurrent",
+    "build:rust": "cd transit/rust && cargo build --release && cp target/release/libchat_benchmark.so index.node",
+    "build:java": "mkdir -p transit/java/build && javac -d transit/java/build transit/java/src/main/java/chatservice/ChatService.java -cp transit/java/libs/gson-2.10.1.jar",
+    "build:thrift": "cd thrift && thrift --gen py chat.thrift && cp -r gen-py/chat_thrift chat_thrift",
+    "build:grpc": "cd grpc && python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. proto/chat.proto",
+    "install:fastapi": "cd fastapi && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:grpc": "cd grpc && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:thrift": "cd thrift && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:zeromq": "cd zeromq && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:redis": "cd redis-pubsub && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start:fastapi": "fastapi/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000",
+    "setup": "npm run build:rust && npm run build:java && npm run build:thrift && npm run build:grpc && npm run install:fastapi && npm run install:grpc && npm run install:thrift && npm run install:zeromq && npm run install:redis"
+  }
+}
