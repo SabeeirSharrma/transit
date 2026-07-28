@@ -273,3 +273,80 @@ self._call_executor.submit(self._handle_call, payload, request_id, client)
 
 **Pros:** Eliminates deadlock entirely. Preserves request pipelining and concurrency. No performance regression.
 **Cons:** Uses more threads (2× executor workers). Acceptable for IPC servers.
+
+---
+
+## Issue: Data Contract Mismatches Across Backend Servers
+
+**Severity:** High — produces incorrect benchmark results (phantom wins/losses)
+**Date:** 2026-07-28
+**Component:** Multiple Python server implementations (`zeromq/server.py`, `redis-pubsub/server.py`, `subprocess/server.py`, `unix-socket/server.py`, `grpc/server.py`, `thrift/server.py`)
+
+---
+
+### Symptom
+
+Benchmark results show certain backends (especially ZeroMQ and Redis) performing suspiciously faster or slower than expected. Some backends appear to produce correct results but with wrong field names, causing silent data loss.
+
+---
+
+### Root Cause: Field Name Mismatches
+
+Each Python server implemented its own computation functions with **different field names** than the benchmark payload. The benchmark runner sends payloads with specific field names (defined in `run-benchmark.js`), but the servers expected different names.
+
+#### Examples of Mismatches
+
+| Operation | Benchmark Payload Key | Server Expected Key | Result |
+|-----------|----------------------|---------------------|--------|
+| ETL Pipeline | `csv_data` | `rows` | Server received empty string, processed 0 rows |
+| Matrix Multiply | `a`, `b` (flat arrays) | `matrix_a`, `matrix_b` (2D arrays) | Server received empty arrays, returned zero matrix |
+| Matrix Determinant | `flat`, `n` | `matrix` (2D array) | Server received empty array, returned 0 |
+| Graph Processing | `edges_flat` (flat array) | `edges` (array of tuples) | Server received empty array, no edges processed |
+| Graph Processing | `iterations` | `iterations` (same) | OK |
+
+#### Why This Produced Wrong Results
+
+When a server receives an empty payload (due to wrong field names), it processes zero data and returns near-instant results. This made the backend appear extremely fast — a "phantom win" where the speed advantage comes from doing no work, not from efficient implementation.
+
+For example, ZeroMQ showed 0.15ms for ETL Pipeline while FastAPI showed 4.2ms. The 28x speedup was entirely due to ZeroMQ processing an empty string while FastAPI processed 1000 rows.
+
+---
+
+### Fix: Shared Computation Module
+
+Created `computational/shared/computations.py` — a single source of truth for all computation functions with field names matching the benchmark payload format.
+
+**All servers now import from this module:**
+
+```python
+from shared.computations import OPERATIONS
+
+def handle_request(operation, payload):
+    fn = OPERATIONS.get(operation)
+    if fn:
+        return fn(payload)
+    return {"error": f"Unknown operation: {operation}"}
+```
+
+**Files updated:**
+- `computational/zeromq/server.py` — rewritten to use shared module
+- `computational/redis-pubsub/server.py` — rewritten to use shared module
+- `computational/subprocess/server.py` — rewritten to use shared module
+- `computational/unix-socket/server.py` — rewritten to use shared module
+- `computational/grpc/server.py` — rewritten to use shared module
+- `computational/thrift/server.py` — rewritten to use shared module
+
+---
+
+### Preventive Measure: Output Correctness Validation
+
+Added a validation phase to `run-benchmark.js` that runs each operation once per backend and compares results against a reference (FastAPI or Transit/Rust). Mismatches are flagged with warnings in the output.
+
+**How it works:**
+1. Before timing benchmarks, each backend runs every operation once
+2. Results are normalized (strip timing fields, handle nesting differences)
+3. Deep comparison with floating-point tolerance catches field mismatches
+4. Volatile fields (readability_score, PageRank exact values) are skipped
+5. Summary shows PASS/WARN for each operation
+
+This prevents future ghost wins by catching data contract regressions automatically.
