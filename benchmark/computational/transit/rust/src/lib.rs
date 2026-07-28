@@ -70,6 +70,7 @@ pub struct TextAnalysisResult {
     pub top_words: Vec<WordFrequency>,
     pub bigrams: Vec<WordFrequency>,
     pub readability_score: f64,
+    pub duration_ms: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -146,6 +147,7 @@ pub fn analyze_text_full(text: String) -> String {
         top_words,
         bigrams,
         readability_score: readability,
+        duration_ms: start.elapsed().as_secs_f64() * 1000.0,
     };
 
     serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string())
@@ -248,6 +250,7 @@ pub struct GraphResult {
     pub shortest_paths: Vec<ShortestPath>,
     pub page_rank: Vec<PageRankEntry>,
     pub connected_components: usize,
+    pub duration_ms: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -344,6 +347,7 @@ pub fn process_graph(nodes: u32, edges_flat: Vec<i64>, iterations: u32) -> Strin
         shortest_paths,
         page_rank,
         connected_components: components,
+        duration_ms: start.elapsed().as_secs_f64() * 1000.0,
     };
 
     serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string())

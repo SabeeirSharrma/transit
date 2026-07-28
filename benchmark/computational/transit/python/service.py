@@ -396,6 +396,7 @@ class TransitServer:
         # Register cleanup
         atexit.register(self._cleanup_socket_file)
         signal.signal(signal.SIGTERM, lambda *_: (self._cleanup_socket_file(), sys.exit(0)))
+        signal.signal(signal.SIGINT, lambda *_: (self._cleanup_socket_file(), sys.exit(0)))
 
         # Try UDS first on Linux/macOS
         if hasattr(socket, "AF_UNIX") and sys.platform != "win32":
