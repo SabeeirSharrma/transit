@@ -1,5 +1,19 @@
 # transit
 
+## 2.3.0
+
+### Minor Changes
+
+- Patch: Fix thread pool deadlock by processing CALL_REQUESTs inline in TransitServer
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/java-runtime@2.3.0
+  - @sabeeirsharrma/python-runtime@2.3.0
+  - @sabeeirsharrma/scanner@2.3.0
+  - @sabeeirsharrma/schema@2.3.0
+
 ## 2.2.0
 
 ### Minor Changes

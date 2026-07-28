@@ -1,5 +1,16 @@
 # js-rust-java-demo
 
+## 2.3.0
+
+### Minor Changes
+
+- Patch: Fix thread pool deadlock by processing CALL_REQUESTs inline in TransitServer
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/transit@2.3.0
+
 ## 2.2.0
 
 ### Minor Changes
