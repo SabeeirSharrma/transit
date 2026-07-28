@@ -175,6 +175,24 @@ const py = transit.python("./transit/python", { transport: "uds" }); // or "tcp"
 
 ---
 
+## Resolution: UDS Support (Already Implemented)
+
+The `PythonProcessManager` in `@sabeeirsharrma/python-runtime` **already supports UDS**. The `waitForTransport()` method detects both `SOCKET=` and `PORT=` patterns, and `createConnection()` handles both UDS and TCP connections. No changes were needed for this fix.
+
+---
+
+## Resolution: Thread Pool Deadlock (Fixed 2026-07-28)
+
+The thread pool deadlock was fixed by handling `_handle_call` inline instead of submitting to the executor. See "Issue: Thread Pool Deadlock in Python Service" below.
+
+---
+
+## Resolution: Rust Compiler Warnings (Fixed 2026-07-28)
+
+Added `duration_ms` field to `TextAnalysisResult` and `GraphResult` structs in `benchmark/benchmark/computational/transit/rust/src/lib.rs`, making `analyze_text_full` and `process_graph` consistent with other benchmark functions that report timing.
+
+---
+
 ## Recommendation
 
 **Fix 1** is the correct long-term solution. UDS is genuinely faster for local IPC (benchmarks typically show 20-40% lower latency vs TCP loopback), and the Python server's preference for UDS is a good default. The Node.js bridge should adapt to what the server offers, not force TCP.
@@ -196,3 +214,57 @@ The `.transit-cache.json` scanner picks up `TransitServer.start` as an exported 
 ### Process Cleanup
 
 When the benchmark is interrupted (Ctrl+C), orphaned Python processes and stale UDS socket files (`/tmp/transit-*.sock`) are left behind. The `atexit` handler in `service.py` only fires on clean exit, not on SIGINT/SIGKILL. Consider adding SIGINT handling or a cleanup script.
+
+---
+
+## Issue: Thread Pool Deadlock in Python Service
+
+**Severity:** Critical — Python benchmarks hang indefinitely
+**Date:** 2026-07-28
+**Component:** Python `TransitServer` (`_handle_client` + `_handle_call`)
+
+---
+
+### Symptom
+
+After the UDS connection is established, the benchmark hangs during the first Python function call. No error messages appear, and no timeout is triggered. The output stops at:
+
+```
+[transit-python] Connected to Python process on UDS /tmp/transit-XXXXX.sock
+```
+
+---
+
+### Root Cause: Thread Pool Exhaustion Deadlock
+
+The `ThreadPoolExecutor` is shared between `_handle_client` (connection handler) and `_handle_call` (request processor). When the connection pool creates N connections, N `_handle_client` tasks are submitted to the executor. If the executor has M workers (where M < N), all M workers become blocked in `_recv_exact()` waiting for requests.
+
+When a request arrives and `_handle_client` submits `_handle_call` to the same executor, no workers are available to process it. `_handle_client` loops back to `_recv_exact()` and blocks again. `_handle_call` is queued indefinitely — **deadlock**.
+
+**Example:** On a 4-core machine (`max_workers=4`), `connectPool` creates 8 connections → 8 `_handle_client` tasks. 4 run immediately, 4 queued. When one submits `_handle_call`, all 4 workers are busy → `_handle_call` never runs.
+
+---
+
+### Fix: Handle Calls Inline
+
+Call `_handle_call` directly from `_handle_client` instead of submitting to the executor. Each connection processes requests sequentially (Node.js awaits each call), so there's no need for concurrent dispatch.
+
+**Files changed:**
+- `benchmark/benchmark/chat-server/transit/python/service.py`
+- `benchmark/benchmark/computational/transit/python/service.py`
+- `packages/transit-py-runtime/transit_server.py`
+
+**Diff pattern:**
+
+```python
+# BEFORE (deadlock-prone):
+if msg_type == TYPE_CALL_REQUEST:
+    self._executor.submit(self._handle_call, payload, request_id, client)
+
+# AFTER (inline, no deadlock):
+if msg_type == TYPE_CALL_REQUEST:
+    self._handle_call(payload, request_id, client)
+```
+
+**Pros:** Eliminates deadlock entirely. Simpler code. No performance regression (requests were already serial).
+**Cons:** Removes request pipelining support (not used by the benchmark anyway).

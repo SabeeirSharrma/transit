@@ -221,17 +221,16 @@ class TransitServer:
     def _handle_client(self, client):
         """Handle a single client connection.
 
-        Reads requests sequentially but dispatches CALL_REQUESTs to the
-        thread pool for concurrent execution (request pipelining). A
-        per-client write lock prevents interleaved response writes.
+        Reads requests sequentially and processes CALL_REQUESTs inline.
+        Handles calls inline to avoid deadlock: _handle_client runs on the
+        executor, so submitting _handle_call to the same executor can
+        deadlock when all workers are occupied by _handle_client tasks
+        from the connection pool.
         """
         try:
             # TCP_NODELAY only applies to TCP sockets, not UDS
             if self._socket_path is None:
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-
-            # Per-client write lock for concurrent response writes
-            write_lock = threading.Lock()
 
             with client:
                 while self._running:
@@ -251,25 +250,22 @@ class TransitServer:
                     # Read payload
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
 
-                    # Dispatch — calls go to the executor for parallel processing
+                    # Handle inline to avoid thread pool deadlock
                     if msg_type == TYPE_CALL_REQUEST:
-                        self._executor.submit(
-                            self._handle_call, payload, request_id, client, write_lock
-                        )
+                        self._handle_call(payload, request_id, client)
                     elif msg_type == TYPE_HEALTH_PING:
-                        with write_lock:
-                            self._handle_health_ping(request_id, client)
+                        self._handle_health_ping(request_id, client)
                     else:
                         print(f"[transit-py] Unknown type: {msg_type}", file=sys.stderr)
         except Exception as e:
             if self._running:
                 print(f"[transit-py] Client error: {e}", file=sys.stderr)
 
-    def _handle_call(self, payload, request_id, client, write_lock):
+    def _handle_call(self, payload, request_id, client):
         """Handle a CALL_REQUEST message.
 
-        May be called concurrently from the executor pool. The write_lock
-        ensures responses are not interleaved on the socket.
+        Processes the request and writes the response directly to the client socket.
+        Called inline from _handle_client to avoid thread pool deadlock.
         """
         try:
             buf = memoryview(payload)
@@ -283,7 +279,7 @@ class TransitServer:
             args_len = struct.unpack_from("<I", buf, args_offset)[0]
             args_json = bytes(buf[args_offset + 4 : args_offset + 4 + args_len]).decode("utf-8")
 
-            # Look up and call the function (no lock held — parallel execution)
+            # Look up and call the function
             fn = _functions.get(fn_name)
             if fn is None:
                 status = STATUS_ERROR
@@ -314,9 +310,7 @@ class TransitServer:
             struct.pack_into("<BI", resp, HEADER_SIZE, status, result_len)
             resp[HEADER_SIZE + 5 :] = result_bytes
 
-            # Acquire lock only for the write to prevent interleaved responses
-            with write_lock:
-                client.sendall(resp)
+            client.sendall(resp)
         except Exception as e:
             print(f"[transit-py] Call handler error: {e}", file=sys.stderr)
 
