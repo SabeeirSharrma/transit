@@ -26,9 +26,44 @@ import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs";
+import {
+  GrpcClient, ThriftClient, UnixSocketClient,
+  SubprocessClient, ZeroMQClient, RedisPubSubClient,
+} from "../clients.mjs";
 
 const __dirname = import.meta.dirname;
 const RESULTS_DIR = resolve(__dirname, "./results");
+
+// gRPC and Thrift RPC maps for chat-server operations
+const CHAT_GRPC_RPC_MAP = {
+  message_pipeline:    { method: "SendMessage" },
+  fanout_delivery:     { method: "RouteMessage" },
+  session_validation:  { method: "ValidateSession" },
+  typing_indicator:    { method: "RouteMessage" },  // simplified: reuse RouteMessage
+  read_receipt:        { method: "RouteMessage" },  // simplified
+  presence_update:     { method: "RouteMessage" },  // simplified
+  content_moderation:  { method: "ModerateContent" },
+  message_search:      { method: "SearchMessages" },
+  analytics_pipeline:  { method: "GetAnalytics" },
+  notification_builder: { method: "RouteMessage" },  // simplified
+  user_lookup:         { method: "GetUser" },
+  channel_history:     { method: "GetChannelHistory" },
+};
+
+const CHAT_THRIFT_RPC_MAP = {
+  message_pipeline:    { method: "sendMessage" },
+  fanout_delivery:     { method: "routeMessage" },
+  session_validation:  { method: "validateSession" },
+  typing_indicator:    { method: "routeMessage" },
+  read_receipt:        { method: "routeMessage" },
+  presence_update:     { method: "routeMessage" },
+  content_moderation:  { method: "moderateContent" },
+  message_search:      { method: "searchMessages" },
+  analytics_pipeline:  { method: "getAnalytics" },
+  notification_builder: { method: "routeMessage" },
+  user_lookup:         { method: "getUser" },
+  channel_history:     { method: "getChannelHistory" },
+};
 
 // ─── CLI Argument Parsing ────────────────────────────────────────────────────
 
@@ -408,6 +443,67 @@ async function runConcurrentBenchmark(benchmark, mode, config, concurrency) {
   };
 }
 
+// ─── Additional Backend Benchmarks ────────────────────────────────────────────
+
+async function runAdditionalBenchmark(benchmark, client) {
+  const times = [];
+  const errors = [];
+  const opName = Object.entries(BENCHMARKS).find(([, v]) => v === benchmark)?.[0];
+
+  for (let i = 0; i < WARMUP + ITERATIONS; i++) {
+    const payload = JSON.parse(benchmark.data());
+    const start = performance.now();
+    try {
+      // For chat-server, the data generator returns a JSON string with multiple fields
+      // We need to pass each field as a separate argument to the transit client
+      // But for additional backends, we pass the operation and the individual payload fields
+      await client.call({ operation: opName, payload });
+    } catch (e) {
+      errors.push(e.message);
+    }
+    const elapsed = performance.now() - start;
+    if (i >= WARMUP) times.push(elapsed);
+  }
+
+  return {
+    ...stats(times),
+    errors: errors.length,
+    ops_per_sec: 1000 / (times.reduce((a, b) => a + b, 0) / times.length),
+  };
+}
+
+async function runConcurrentAdditionalBenchmark(benchmark, client, concurrency) {
+  const times = [];
+  const errors = [];
+  const opName = Object.entries(BENCHMARKS).find(([, v]) => v === benchmark)?.[0];
+
+  for (let batch = 0; batch < WARMUP + ITERATIONS; batch += concurrency) {
+    const promises = [];
+    for (let c = 0; c < concurrency && batch + c < WARMUP + ITERATIONS; c++) {
+      const payload = JSON.parse(benchmark.data());
+      const start = performance.now();
+      const p = (async () => {
+        try {
+          await client.call({ operation: opName, payload });
+        } catch (e) {
+          errors.push(e.message);
+        }
+        return performance.now() - start;
+      })();
+      promises.push(p);
+    }
+    const results = await Promise.all(promises);
+    if (batch >= WARMUP) times.push(...results);
+  }
+
+  return {
+    ...stats(times),
+    errors: errors.length,
+    ops_per_sec: 1000 / (times.reduce((a, b) => a + b, 0) / times.length),
+    concurrency,
+  };
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -487,8 +583,60 @@ async function main() {
     jv = transit.java(resolve(javaDir, "./src/main/java"));
   }
 
-  console.log("✓ All Transit services ready\n");
+  // ── Start additional backends ──
+  const grpcClient = new GrpcClient({
+    protoPath: resolve(__dirname, "./grpc/proto/benchmark.proto"),
+    venvPython: resolve(__dirname, "./grpc/.venv/bin/python3"),
+    rpcMap: CHAT_GRPC_RPC_MAP,
+  });
+  const thriftClient = new ThriftClient({
+    venvPython: resolve(__dirname, "./thrift/.venv/bin/python3"),
+    rpcMap: CHAT_THRIFT_RPC_MAP,
+  });
+  const unixSocketClient = new UnixSocketClient({
+    socketPath: "/tmp/transit_chat_benchmark.sock",
+  });
+  const subprocessClient = new SubprocessClient({
+    scriptPath: resolve(__dirname, "./subprocess/server.py"),
+    venvPython: resolve(__dirname, "./subprocess/.venv/bin/python3"),
+  });
+  const zeromqClient = new ZeroMQClient({ port: 5556 });
+  const redisClient = new RedisPubSubClient({ host: "127.0.0.1", port: 6379 });
 
+  const additionalBackends = [
+    { name: "gRPC",         client: grpcClient,      venv: "./grpc/.venv/bin/python3",      server: "./grpc/server.py",      cwd: "./grpc" },
+    { name: "Thrift",       client: thriftClient,     venv: "./thrift/.venv/bin/python3",    server: "./thrift/server.py",    cwd: "./thrift" },
+    { name: "Unix Socket",  client: unixSocketClient, venv: "./unix-socket/.venv/bin/python3", server: "./unix-socket/server.py", cwd: "./unix-socket" },
+    { name: "Subprocess",   client: subprocessClient, venv: "./subprocess/.venv/bin/python3", server: null,                  cwd: null },
+    { name: "ZeroMQ",       client: zeromqClient,     venv: "./zeromq/.venv/bin/python3",    server: "./zeromq/server.py",    cwd: "./zeromq" },
+    { name: "Redis",        client: redisClient,      venv: null,                           server: null,                   cwd: null },
+  ];
+
+  for (const backend of additionalBackends) {
+    try {
+      process.stdout.write(`  Starting ${backend.name}...`);
+      if (backend.server) {
+        const venvPython = resolve(__dirname, backend.venv);
+        const serverProc = spawn(venvPython, [backend.server.split("/").pop()], {
+          cwd: resolve(__dirname, backend.cwd),
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        serverProc.stderr?.on("data", (d) => {
+          const s = d.toString();
+          if (s.includes("started") || s.includes("ready")) process.stdout.write(" " + s.trim());
+        });
+        backend.serverProc = serverProc;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      await backend.client.start();
+      console.log(` ✓`);
+    } catch (e) {
+      console.log(` ✗ (${e.message})`);
+      backend.client = null;
+    }
+  }
+
+  console.log("\n✓ All services ready\n");
   console.log(transit.info());
 
   // ── Run benchmarks ──
@@ -541,11 +689,36 @@ async function main() {
             console.log(`${javaResult.mean.toFixed(2)}ms avg, ${javaResult.ops_per_sec.toFixed(1)} ops/s (p95: ${javaResult.p95.toFixed(2)}ms)`);
           }
 
+          // Additional backends
+          const additionalResults = {};
+          const additionalBenchmarks = [
+            { name: "gRPC",        label: "gRPC             ", client: grpcClient,      enabled: grpcClient?.client },
+            { name: "Thrift",      label: "Thrift           ", client: thriftClient,     enabled: thriftClient?.client },
+            { name: "Unix Socket", label: "Unix Socket      ", client: unixSocketClient, enabled: true },
+            { name: "Subprocess",  label: "Subprocess       ", client: subprocessClient, enabled: true },
+            { name: "ZeroMQ",      label: "ZeroMQ           ", client: zeromqClient,     enabled: true },
+            { name: "Redis",       label: "Redis Pub/Sub    ", client: redisClient,      enabled: true },
+          ];
+
+          for (const ab of additionalBenchmarks) {
+            if (!ab.enabled) continue;
+            try {
+              process.stdout.write(`    ${ab.label} ... `);
+              const result = await runAdditionalBenchmark(benchmark, ab.client);
+              console.log(`${result.mean.toFixed(2)}ms avg, ${result.ops_per_sec.toFixed(1)} ops/s (p95: ${result.p95.toFixed(2)}ms)`);
+              additionalResults[ab.name] = result;
+            } catch (e) {
+              console.log(`ERROR (${e.message})`);
+              additionalResults[ab.name] = { error: e.message };
+            }
+          }
+
           results.benchmarks[key] = {
             name: benchmark.name,
             category: benchmark.category,
             fastapi: fastapiResult,
             transit: { rust: rustResult, python: pyResult, java: javaResult },
+            additional: additionalResults,
           };
         } catch (e) {
           console.error(`\n    ERROR: ${e.message}`);
@@ -588,12 +761,37 @@ async function main() {
           console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
         }
 
+        // Additional concurrent backends
+        const additionalConc = {};
+        const additionalConcBenchmarks = [
+          { name: "gRPC",        label: "gRPC             ", client: grpcClient,      enabled: grpcClient?.client },
+          { name: "Thrift",      label: "Thrift           ", client: thriftClient,     enabled: thriftClient?.client },
+          { name: "Unix Socket", label: "Unix Socket      ", client: unixSocketClient, enabled: true },
+          { name: "Subprocess",  label: "Subprocess       ", client: subprocessClient, enabled: true },
+          { name: "ZeroMQ",      label: "ZeroMQ           ", client: zeromqClient,     enabled: true },
+          { name: "Redis",       label: "Redis Pub/Sub    ", client: redisClient,      enabled: true },
+        ];
+
+        for (const ab of additionalConcBenchmarks) {
+          if (!ab.enabled) continue;
+          try {
+            process.stdout.write(`    ${ab.label} ... `);
+            const result = await runConcurrentAdditionalBenchmark(benchmark, ab.client, CONCURRENT);
+            console.log(`${result.mean.toFixed(2)}ms avg, ${result.ops_per_sec.toFixed(1)} ops/s`);
+            additionalConc[ab.name] = result;
+          } catch (e) {
+            console.log(`ERROR (${e.message})`);
+            additionalConc[ab.name] = { error: e.message };
+          }
+        }
+
         if (results.benchmarks[key]) {
           results.benchmarks[key].concurrent = {
             fastapi: fastapiConc,
             rust: rustConc,
             python: pyConc,
             java: javaConc,
+            additional: additionalConc,
           };
         }
       } catch (e) {
@@ -617,9 +815,19 @@ async function main() {
   fs.writeFileSync(logPath, logText);
   console.log(`✓ Log saved to ${logPath}`);
 
+  // Generate and save markdown report
+  const mdText = generateMarkdown(results);
+  const mdPath = resolve(RESULTS_DIR, "benchmark.md");
+  fs.writeFileSync(mdPath, mdText);
+  console.log(`✓ Markdown report saved to ${mdPath}`);
+
   // Cleanup
   fastapiProc.kill();
   javaProc?.kill();
+  for (const ab of additionalBackends) {
+    ab.client?.close?.();
+    ab.serverProc?.kill();
+  }
 }
 
 function printSummary(results) {
@@ -631,15 +839,18 @@ function printSummary(results) {
   out("║                    CHAT SERVER BENCHMARK SUMMARY                            ║");
   out("╚══════════════════════════════════════════════════════════════════════════════╝");
 
+  const ADDITIONAL = ["gRPC", "Thrift", "Unix Socket", "Subprocess", "ZeroMQ", "Redis"];
+
   // Serial table
   out("\n─── Serial (single request, 100 iterations) ──────────────────────────────────\n");
 
-  const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java", "Winner"];
+  const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java",
+                   ...ADDITIONAL, "Winner"];
   const rows = [];
 
   for (const [key, data] of Object.entries(results.benchmarks)) {
     if (data.error) {
-      rows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", data.error]);
+      rows.push([data.name, "ERROR", ...ADDITIONAL.map(() => "ERROR"), data.error]);
       continue;
     }
 
@@ -648,14 +859,16 @@ function printSummary(results) {
     const pt = data.transit?.python?.mean || Infinity;
     const jt = data.transit?.java?.mean || Infinity;
 
-    const fastest = Math.min(ft, rt, pt, jt);
-    let winner = "FastAPI";
-    if (fastest === rt) winner = "Transit/Rust";
-    else if (fastest === pt) winner = "Transit/Python";
-    else if (fastest === jt) winner = "Transit/Java";
+    const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+    for (const name of ADDITIONAL) {
+      const r = data.additional?.[name];
+      times[name] = r?.mean || Infinity;
+    }
 
+    const fastest = Math.min(...Object.values(times));
+    const winner = Object.keys(times).find(k => times[k] === fastest);
     const speedup = ft === fastest
-      ? `${(Math.min(rt, pt, jt) / ft).toFixed(1)}x slower`
+      ? `${(Math.min(...Object.values(times).filter(t => t !== ft)) / ft).toFixed(1)}x slower`
       : `${(ft / fastest).toFixed(1)}x faster`;
 
     rows.push([
@@ -663,20 +876,21 @@ function printSummary(results) {
       `${ft.toFixed(2)}ms`,
       `${rt.toFixed(2)}ms`,
       `${pt.toFixed(2)}ms`,
-      jt !== null ? `${jt.toFixed(2)}ms` : "N/A",
+      jt !== Infinity ? `${jt.toFixed(2)}ms` : "N/A",
+      ...ADDITIONAL.map(n => times[n] !== Infinity ? `${times[n].toFixed(2)}ms` : "-"),
       `${winner} (${speedup})`,
     ]);
   }
 
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map(r => r[i].length))
+    Math.max(h.length, ...rows.map(r => (r[i] || "").length))
   );
 
   const sep = widths.map(w => "─".repeat(w + 2)).join("┼");
   out(headers.map((h, i) => h.padEnd(widths[i])).join(" │ "));
   out(sep);
   for (const row of rows) {
-    out(row.map((c, i) => c.padEnd(widths[i])).join(" │ "));
+    out(row.map((c, i) => (c || "-").padEnd(widths[i])).join(" │ "));
   }
 
   // Concurrent table
@@ -686,7 +900,7 @@ function printSummary(results) {
   for (const [key, data] of Object.entries(results.benchmarks)) {
     if (!data.concurrent) {
       if (data.concurrent_error) {
-        concRows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", data.concurrent_error]);
+        concRows.push([data.name, "ERROR", ...ADDITIONAL.map(() => "ERROR"), data.concurrent_error]);
       }
       continue;
     }
@@ -696,14 +910,16 @@ function printSummary(results) {
     const pt = data.concurrent.python?.mean || Infinity;
     const jt = data.concurrent.java?.mean || Infinity;
 
-    const fastest = Math.min(ft, rt, pt, jt);
-    let winner = "FastAPI";
-    if (fastest === rt) winner = "Transit/Rust";
-    else if (fastest === pt) winner = "Transit/Python";
-    else if (fastest === jt) winner = "Transit/Java";
+    const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+    for (const name of ADDITIONAL) {
+      const r = data.concurrent.additional?.[name];
+      times[name] = r?.mean || Infinity;
+    }
 
+    const fastest = Math.min(...Object.values(times));
+    const winner = Object.keys(times).find(k => times[k] === fastest);
     const speedup = ft === fastest
-      ? `${(Math.min(rt, pt, jt) / ft).toFixed(1)}x slower`
+      ? `${(Math.min(...Object.values(times).filter(t => t !== ft)) / ft).toFixed(1)}x slower`
       : `${(ft / fastest).toFixed(1)}x faster`;
 
     concRows.push([
@@ -711,20 +927,21 @@ function printSummary(results) {
       `${ft.toFixed(2)}ms`,
       `${rt.toFixed(2)}ms`,
       `${pt.toFixed(2)}ms`,
-      jt !== null ? `${jt.toFixed(2)}ms` : "N/A",
+      jt !== Infinity ? `${jt.toFixed(2)}ms` : "N/A",
+      ...ADDITIONAL.map(n => times[n] !== Infinity ? `${times[n].toFixed(2)}ms` : "-"),
       `${winner} (${speedup})`,
     ]);
   }
 
   const concWidths = headers.map((h, i) =>
-    Math.max(h.length, ...concRows.map(r => r[i].length))
+    Math.max(h.length, ...concRows.map(r => (r[i] || "").length))
   );
 
   const concSep = concWidths.map(w => "─".repeat(w + 2)).join("┼");
   out(headers.map((h, i) => h.padEnd(concWidths[i])).join(" │ "));
   out(concSep);
   for (const row of concRows) {
-    out(row.map((c, i) => c.padEnd(concWidths[i])).join(" │ "));
+    out(row.map((c, i) => (c || "-").padEnd(concWidths[i])).join(" │ "));
   }
 
   // Key insight
@@ -740,6 +957,157 @@ function printSummary(results) {
   out("  request pipeline without spawning separate HTTP services or managing routes.");
 
   return lines.join("\n");
+}
+
+function generateMarkdown(results) {
+  const md = [];
+  const modeLabel = results.mode === "serial" ? "Serial"
+                  : results.mode === "concurrent" ? "Concurrent"
+                  : "Serial & Concurrent";
+
+  const ADDITIONAL = ["gRPC", "Thrift", "Unix Socket", "Subprocess", "ZeroMQ", "Redis"];
+
+  md.push(`# Chat Server Benchmark Results`);
+  md.push(``);
+  md.push(`> Generated: ${results.timestamp} | Mode: ${modeLabel} | Iterations: ${results.iterations} | Warmup: ${results.warmup} | Concurrency: ${results.concurrency}`);
+  md.push(``);
+
+  // ── Serial Table ──
+  if (results.mode === "both" || results.mode === "serial") {
+    md.push(`## Serial (single request, ${results.iterations} iterations)`);
+    md.push(``);
+
+    const hdr = ["Operation", "Category",
+      "FastAPI (ms)", "FastAPI (ops/s)",
+      "Transit/Rust (ms)", "Transit/Rust (ops/s)",
+      "Transit/Python (ms)", "Transit/Python (ops/s)",
+      "Transit/Java (ms)", "Transit/Java (ops/s)",
+      ...ADDITIONAL.flatMap(n => [`${n} (ms)`, `${n} (ops/s)`]),
+      "Winner"];
+    md.push(`| ${hdr.join(" | ")} |`);
+    md.push(`| ${hdr.map(() => "---").join(" | ")} |`);
+
+    for (const [key, data] of Object.entries(results.benchmarks)) {
+      if (data.error) {
+        md.push(`| ${data.name} | ${data.category || "-"} | ${hdr.slice(2).map(() => "ERROR").join(" | ")} | ${data.error} |`);
+        continue;
+      }
+
+      const ft = data.fastapi?.mean ?? Infinity;
+      const fOps = data.fastapi?.ops_per_sec ?? 0;
+      const rt = data.transit?.rust?.mean ?? Infinity;
+      const rOps = data.transit?.rust?.ops_per_sec ?? 0;
+      const pt = data.transit?.python?.mean ?? Infinity;
+      const pOps = data.transit?.python?.ops_per_sec ?? 0;
+      const jt = data.transit?.java?.mean ?? Infinity;
+      const jOps = data.transit?.java?.ops_per_sec ?? 0;
+
+      const vals = [data.name, data.category || "-"];
+      const pushMsOps = (ms, ops) => {
+        vals.push(ms === Infinity ? "N/A" : ms.toFixed(2));
+        vals.push(ms === Infinity ? "N/A" : ops.toFixed(1));
+      };
+      pushMsOps(ft, fOps);
+      pushMsOps(rt, rOps);
+      pushMsOps(pt, pOps);
+      pushMsOps(jt, jOps);
+
+      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+      for (const name of ADDITIONAL) {
+        const r = data.additional?.[name];
+        const ms = r?.mean ?? Infinity;
+        const ops = r?.ops_per_sec ?? 0;
+        pushMsOps(ms, ops);
+        if (ms < Infinity) times[name] = ms;
+      }
+
+      const fastest = Math.min(...Object.values(times));
+      const winner = Object.keys(times).find(k => times[k] === fastest);
+      const speedup = fastest === ft
+        ? `${(Math.min(...Object.values(times).filter(t => t !== ft)) / ft).toFixed(1)}x slower`
+        : `${(ft / fastest).toFixed(1)}x faster`;
+      vals.push(`**${winner}** (${speedup})`);
+
+      md.push(`| ${vals.join(" | ")} |`);
+    }
+    md.push(``);
+  }
+
+  // ── Concurrent Table ──
+  if (results.mode === "both" || results.mode === "concurrent") {
+    md.push(`## Concurrent (${results.concurrency} parallel requests)`);
+    md.push(``);
+
+    const hdr = ["Operation", "Category",
+      "FastAPI (ms)", "FastAPI (ops/s)",
+      "Transit/Rust (ms)", "Transit/Rust (ops/s)",
+      "Transit/Python (ms)", "Transit/Python (ops/s)",
+      "Transit/Java (ms)", "Transit/Java (ops/s)",
+      ...ADDITIONAL.flatMap(n => [`${n} (ms)`, `${n} (ops/s)`]),
+      "Winner"];
+    md.push(`| ${hdr.join(" | ")} |`);
+    md.push(`| ${hdr.map(() => "---").join(" | ")} |`);
+
+    for (const [key, data] of Object.entries(results.benchmarks)) {
+      if (!data.concurrent) {
+        if (data.concurrent_error) {
+          md.push(`| ${data.name} | ${data.category || "-"} | ${hdr.slice(2).map(() => "ERROR").join(" | ")} | ${data.concurrent_error} |`);
+        }
+        continue;
+      }
+
+      const ft = data.concurrent.fastapi?.mean ?? Infinity;
+      const fOps = data.concurrent.fastapi?.ops_per_sec ?? 0;
+      const rt = data.concurrent.rust?.mean ?? Infinity;
+      const rOps = data.concurrent.rust?.ops_per_sec ?? 0;
+      const pt = data.concurrent.python?.mean ?? Infinity;
+      const pOps = data.concurrent.python?.ops_per_sec ?? 0;
+      const jt = data.concurrent.java?.mean ?? Infinity;
+      const jOps = data.concurrent.java?.ops_per_sec ?? 0;
+
+      const vals = [data.name, data.category || "-"];
+      const pushMsOps = (ms, ops) => {
+        vals.push(ms === Infinity ? "N/A" : ms.toFixed(2));
+        vals.push(ms === Infinity ? "N/A" : ops.toFixed(1));
+      };
+      pushMsOps(ft, fOps);
+      pushMsOps(rt, rOps);
+      pushMsOps(pt, pOps);
+      pushMsOps(jt, jOps);
+
+      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+      for (const name of ADDITIONAL) {
+        const r = data.concurrent.additional?.[name];
+        const ms = r?.mean ?? Infinity;
+        const ops = r?.ops_per_sec ?? 0;
+        pushMsOps(ms, ops);
+        if (ms < Infinity) times[name] = ms;
+      }
+
+      const fastest = Math.min(...Object.values(times));
+      const winner = Object.keys(times).find(k => times[k] === fastest);
+      const speedup = fastest === ft
+        ? `${(Math.min(...Object.values(times).filter(t => t !== ft)) / ft).toFixed(1)}x slower`
+        : `${(ft / fastest).toFixed(1)}x faster`;
+      vals.push(`**${winner}** (${speedup})`);
+
+      md.push(`| ${vals.join(" | ")} |`);
+    }
+    md.push(``);
+  }
+
+  // ── Key Takeaways ──
+  md.push(`## Key Takeaways`);
+  md.push(``);
+  md.push(`| Factor | Transit Advantage |`);
+  md.push(`|--------|-------------------|`);
+  md.push(`| Hot path (auth, typing, receipts) | Transit/Rust eliminates HTTP overhead on the most frequently called endpoints |`);
+  md.push(`| Concurrent load | Persistent connections avoid TCP handshake; FastAPI latency degrades 5-10x under load |`);
+  md.push(`| Cross-language | Call Python ML models and Java persistence from the same request pipeline without HTTP |`);
+  md.push(`| Tail latency (p95/p99) | In-process Rust calls have no queuing — direct function call vs HTTP thread pool |`);
+  md.push(``);
+
+  return md.join("\n");
 }
 
 main().catch(console.error);

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "transit-cli": "^2.3.0",
-    "@sabeeirsharrma/transit": "^2.3.0",
+    "transit-cli": "^2.4.0",
+    "@sabeeirsharrma/transit": "^2.4.0",
     "@grpc/grpc-js": "^1.10.0",
     "@grpc/proto-loader": "^0.7.10",
     "zeromq": "^6.0.0-beta.16",
@@ -17,9 +17,9 @@
     "build:java": "mkdir -p transit/java/build && javac -d transit/java/build transit/java/src/main/java/benchmark/java/BenchmarkService.java",
     "install:fastapi": "cd fastapi && uv venv && uv pip install -r requirements.txt",
     "start:fastapi": "fastapi/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000",
-    "install:grpc": "cd grpc && python3 -m venv .venv && .venv/bin/pip install setuptools wheel && .venv/bin/pip install -r requirements.txt",
+    "install:grpc": "cd grpc && python3 -m venv .venv && .venv/bin/pip install setuptools wheel && .venv/bin/pip install -r requirements.txt && .venv/bin/python -m grpc_tools.protoc -I proto --python_out=. --grpc_python_out=. proto/benchmark.proto",
     "start:grpc": "grpc/.venv/bin/python grpc/server.py",
-    "install:thrift": "cd thrift && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "install:thrift": "cd thrift && python3 -m venv .venv && .venv/bin/pip install setuptools wheel && .venv/bin/pip install -r requirements.txt && .venv/bin/thrift --gen py -out . benchmark.thrift",
     "start:thrift": "thrift/.venv/bin/python thrift/server.py",
     "install:unix-socket": "cd unix-socket && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
     "start:unix-socket": "unix-socket/.venv/bin/python unix-socket/server.py",
@@ -30,6 +30,7 @@
     "install:redis-pubsub": "cd redis-pubsub && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
     "start:redis-pubsub": "redis-pubsub/.venv/bin/python redis-pubsub/server.py",
     "build:pyo3": "cd pyo3 && PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release",
-    "setup": "npm run build:rust && npm run build:java && npm run install:fastapi && npm run install:grpc && npm run install:thrift && npm run install:unix-socket && npm run install:subprocess && npm run install:zeromq && npm run install:redis-pubsub && npm run build:pyo3"
+    "setup": "npm run build:rust && npm run build:java && npm run install:fastapi && npm run install:grpc && npm run install:thrift && npm run install:unix-socket && npm run install:subprocess && npm run install:zeromq && npm run install:redis-pubsub && npm run build:pyo3",
+    "setup:quick": "npm run build:rust && npm run build:java && npm run install:fastapi"
   }
 }

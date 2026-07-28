@@ -372,8 +372,8 @@ class TransitServer:
         self._server_socket = None
         self._running = False
         self._executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
+        self._call_executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
         self._socket_path = None
-        self._write_lock = __import__("threading").Lock()
 
     def _cleanup_socket_file(self):
         if self._socket_path and os.path.exists(self._socket_path):
@@ -454,11 +454,10 @@ class TransitServer:
                         break
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
                     if msg_type == TYPE_CALL_REQUEST:
-                        # Handle inline to avoid deadlock: _handle_client runs on
-                        # the executor, so submitting _handle_call to the same
-                        # executor can deadlock when all workers are occupied by
-                        # _handle_client tasks from the connection pool.
-                        self._handle_call(payload, request_id, client)
+                        # Use separate call executor to avoid deadlock:
+                        # _handle_client runs on _executor, so _handle_call
+                        # must use a different executor to avoid contention.
+                        self._call_executor.submit(self._handle_call, payload, request_id, client)
                     elif msg_type == TYPE_HEALTH_PING:
                         resp = struct.pack(HEADER_FORMAT, PROTOCOL_VERSION, TYPE_HEALTH_PONG, request_id, 0)
                         client.sendall(resp)
