@@ -29,7 +29,9 @@ Below are the results of an automated benchmark test comparing Transit against F
 
 If you would like to benchmark on your own hardware, you can switch to the [Benchmark Branch](https://github.com/sabeeirsharrma/transit/tree/benchmark/)
 
-### Serial Results (single request, 100 iterations)
+### Compute Benchmarks
+
+#### Serial Results (single request, 100 iterations)
 
 | Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
 |---|---|---|---|---|---|---|---|---|---|
@@ -41,7 +43,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 | **Fibonacci Memo** | 1.14ms | 0.05ms | 0.08ms | 1.00ms | 0.24ms | 0.09ms | 0.55ms | 0.09ms | **Transit/Rust** (22.7x faster) |
 | **SHA-256 Hashing** | 5.20ms | 0.06ms | 0.16ms | 5.67ms | 9.19ms | 4.89ms | 5.17ms | 0.69ms | **Transit/Rust** (93.8x faster) |
 
-### Concurrent Results (10 parallel requests)
+#### Concurrent Results (10 parallel requests)
 
 | Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
 |---|---|---|---|---|---|---|---|---|---|
@@ -52,6 +54,26 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 | **Graph Processing** | 91.94ms | 2.07ms | 3.32ms | 63.66ms | 56.09ms | 2.45ms | 30.37ms | 7.19ms | **Transit/Rust** (44.3x faster) |
 | **Fibonacci Memo** | 4.30ms | 0.11ms | 1.77ms | 3.40ms | 1.50ms | 0.09ms | 1.01ms | 0.15ms | **ZeroMQ** (46.6x faster) |
 | **SHA-256 Hashing** | 46.42ms | 0.26ms | 1.86ms | 54.91ms | 46.18ms | 1.71ms | 28.53ms | 4.68ms | **Transit/Rust** (180.1x faster) |
+
+### Chat Server Benchmark
+
+
+#### Chat Server Results (Serial — single request, 100 iterations)
+
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Winner |
+|-----------|---------|--------------|----------------|--------------|--------|
+| **Message Send Pipeline** | 0.91ms | 0.00ms | 0.22ms | 0.31ms | **Transit/Rust** (237.3x) |
+| **Fan-out Delivery** | 1.23ms | 0.02ms | 0.29ms | 0.12ms | **Transit/Rust** (54.4x) |
+| **Session Validation** | 0.75ms | 0.00ms | 0.19ms | 0.14ms | **Transit/Rust** (215.6x) |
+| **Typing Indicator** | 0.83ms | 0.00ms | 0.12ms | 0.14ms | **Transit/Rust** (456.5x) |
+| **Read Receipt** | 0.76ms | 0.00ms | 0.15ms | 0.13ms | **Transit/Rust** (367.0x) |
+| **Presence Update** | 0.74ms | 0.01ms | 0.17ms | 0.11ms | **Transit/Rust** (57.7x) |
+| **Content Moderation** | 0.82ms | 0.00ms | 0.13ms | 0.10ms | **Transit/Rust** (360.6x) |
+| **Message Search** | 5.53ms | 1.04ms | 2.88ms | 1.12ms | **Transit/Rust** (5.3x) |
+| **Analytics Pipeline** | 2.74ms | 0.47ms | 1.63ms | 0.59ms | **Transit/Rust** (5.8x) |
+| **Notification Builder** | 1.17ms | 0.01ms | 0.12ms | 0.22ms | **Transit/Rust** (220.6x) |
+| **User Lookup** | 0.67ms | 0.00ms | 0.08ms | 0.16ms | **Transit/Rust** (375.2x) |
+| **Channel History** | 1.74ms | 0.00ms | 0.16ms | 0.22ms | **Transit/Rust** (470.3x) |
 
 ## Quick Start
 
