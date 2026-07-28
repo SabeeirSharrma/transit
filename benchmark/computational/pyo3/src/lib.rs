@@ -1,20 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ComputeRequest {
-    operation: String,
-    payload: serde_json::Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ComputeResponse {
-    result: serde_json::Value,
-    execution_time_ms: f64,
-}
 
 #[pyfunction]
 fn compute(operation: String, payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
@@ -45,36 +32,44 @@ fn compute(operation: String, payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
 fn etl_pipeline(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
     Python::with_gil(|py| {
         let payload = payload.bind(py);
-        let rows: Vec<Py<PyDict>> = payload.get_item("rows")?
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'rows'"))?
+        let csv_data: String = payload.get_item("csv_data")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'csv_data'"))?
             .extract()?;
         
         let mut grouped: HashMap<String, Vec<f64>> = HashMap::new();
         
-        for row in &rows {
-            let row = row.bind(py);
-            let category = row.get_item("category")?
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'category'"))?
-                .extract::<String>()?;
-            let value = row.get_item("value")?
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'value'"))?
-                .extract::<f64>()?;
-            
-            grouped.entry(category).or_insert_with(Vec::new).push(value);
+        for line in csv_data.lines() {
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.len() >= 2 {
+                let key = parts[0].trim().to_string();
+                if let Ok(val) = parts[1].trim().parse::<f64>() {
+                    grouped.entry(key).or_insert_with(Vec::new).push(val);
+                }
+            }
         }
         
-        let result = PyDict::new(py);
-        for (key, values) in &grouped {
+        let mut aggregates = Vec::new();
+        let mut records = 0usize;
+        let mut sorted_keys: Vec<String> = grouped.keys().cloned().collect();
+        sorted_keys.sort();
+        for key in &sorted_keys {
+            let values = &grouped[key];
             let count = values.len();
             let sum: f64 = values.iter().sum();
             let avg = sum / count as f64;
-            
+            records += count;
+
             let group_result = PyDict::new(py);
-            group_result.set_item("count", count)?;
+            group_result.set_item("group", key)?;
             group_result.set_item("sum", sum)?;
             group_result.set_item("avg", avg)?;
-            result.set_item(key, group_result)?;
+            group_result.set_item("count", count)?;
+            aggregates.push(group_result);
         }
+
+        let result = PyDict::new(py);
+        result.set_item("records_processed", records)?;
+        result.set_item("aggregates", aggregates)?;
         
         Ok(result.into())
     })
@@ -91,14 +86,24 @@ fn text_analysis(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         let mut freq: HashMap<String, usize> = HashMap::new();
         
         for word in &words {
-            let word_lower = word.to_lowercase();
-            *freq.entry(word_lower).or_insert(0) += 1;
+            let clean: String = word.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+            if !clean.is_empty() {
+                *freq.entry(clean).or_insert(0) += 1;
+            }
         }
         
-        let mut bigrams = Vec::new();
-        for i in 0..words.len().saturating_sub(1) {
-            bigrams.push(format!("{} {}", words[i], words[i + 1]));
+        // Build bigrams with counts
+        let mut bigram_freq: HashMap<String, usize> = HashMap::new();
+        let clean_words: Vec<String> = words.iter()
+            .map(|w| w.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect())
+            .filter(|w: &String| !w.is_empty())
+            .collect();
+        for i in 0..clean_words.len().saturating_sub(1) {
+            let bigram = format!("{} {}", clean_words[i], clean_words[i + 1]);
+            *bigram_freq.entry(bigram).or_insert(0) += 1;
         }
+        let mut sorted_bigrams: Vec<_> = bigram_freq.into_iter().collect();
+        sorted_bigrams.sort_by(|a, b| b.1.cmp(&a.1));
         
         let avg_word_length = if words.is_empty() {
             0.0
@@ -110,7 +115,6 @@ fn text_analysis(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         result.set_item("word_count", words.len())?;
         result.set_item("unique_words", freq.len())?;
         result.set_item("avg_word_length", avg_word_length)?;
-        result.set_item("avg_sentence_length", words.len())?;
         
         let freq_dict = PyDict::new(py);
         let mut sorted_freq: Vec<_> = freq.into_iter().collect();
@@ -120,7 +124,15 @@ fn text_analysis(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         }
         result.set_item("frequency", freq_dict)?;
         
-        let bigrams_list: Vec<String> = bigrams.into_iter().take(10).collect();
+        let bigrams_list = PyDict::new(py);
+        let mut bigram_idx = 0usize;
+        for (word, count) in sorted_bigrams.into_iter().take(10) {
+            let entry = PyDict::new(py);
+            entry.set_item("word", word)?;
+            entry.set_item("count", count)?;
+            bigrams_list.set_item(bigram_idx, entry)?;
+            bigram_idx += 1;
+        }
         result.set_item("bigrams", bigrams_list)?;
         
         Ok(result.into())
@@ -130,27 +142,42 @@ fn text_analysis(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
 fn matrix_multiply(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
     Python::with_gil(|py| {
         let payload = payload.bind(py);
-        let a: Vec<Vec<f64>> = payload.get_item("matrix_a")?
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'matrix_a'"))?
+        let a: Vec<f64> = payload.get_item("a")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'a'"))?
             .extract()?;
-        let b: Vec<Vec<f64>> = payload.get_item("matrix_b")?
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'matrix_b'"))?
+        let b: Vec<f64> = payload.get_item("b")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'b'"))?
+            .extract()?;
+        let m: usize = payload.get_item("m")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'm'"))?
+            .extract()?;
+        let n: usize = payload.get_item("n")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'n'"))?
+            .extract()?;
+        let p: usize = payload.get_item("p")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'p'"))?
             .extract()?;
         
-        let n = a.len();
-        let mut result = vec![vec![0.0; n]; n];
+        let mut result = vec![0.0; m * p];
         
-        for i in 0..n {
-            for j in 0..n {
-                for k in 0..n {
-                    result[i][j] += a[i][k] * b[k][j];
+        for i in 0..m {
+            for k in 0..n {
+                let a_val = a[i * n + k];
+                for j in 0..p {
+                    result[i * p + j] += a_val * b[k * p + j];
                 }
             }
         }
         
         let result_dict = PyDict::new(py);
         result_dict.set_item("result", result)?;
-        result_dict.set_item("size", n)?;
+        result_dict.set_item("dimensions", {
+            let dims = PyDict::new(py);
+            dims.set_item("m", m)?;
+            dims.set_item("n", n)?;
+            dims.set_item("p", p)?;
+            dims
+        })?;
         
         Ok(result_dict.into())
     })
@@ -159,14 +186,24 @@ fn matrix_multiply(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
 fn matrix_determinant(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
     Python::with_gil(|py| {
         let payload = payload.bind(py);
-        let matrix: Vec<Vec<f64>> = payload.get_item("matrix")?
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'matrix'"))?
+        let flat: Vec<f64> = payload.get_item("flat")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'flat'"))?
             .extract()?;
+        let n: usize = payload.get_item("n")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'n'"))?
+            .extract()?;
+        
+        // Convert flat array to 2D matrix
+        let mut matrix = Vec::new();
+        for i in 0..n {
+            matrix.push(flat[i * n..(i + 1) * n].to_vec());
+        }
         
         let det = compute_determinant(&matrix);
         
         let result = PyDict::new(py);
         result.set_item("determinant", det)?;
+        result.set_item("size", n)?;
         
         Ok(result.into())
     })
@@ -209,15 +246,24 @@ fn graph_processing(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         let nodes = payload.get_item("nodes")?
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'nodes'"))?
             .extract::<usize>()?;
-        let edges: Vec<(usize, usize)> = payload.get_item("edges")?
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'edges'"))?
+        let edges_flat: Vec<usize> = payload.get_item("edges_flat")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'edges_flat'"))?
+            .extract()?;
+        let iterations: usize = payload.get_item("iterations")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Missing 'iterations'"))?
             .extract()?;
         
-        // Build adjacency list
-        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); nodes];
-        for (src, dst) in &edges {
-            adj[*src].push(*dst);
-            adj[*dst].push(*src);
+        // Build adjacency list from flat edge array [src1, dst1, weight1, src2, dst2, weight2, ...]
+        let mut adj: Vec<Vec<(usize, usize)>> = vec![Vec::new(); nodes];
+        for i in (0..edges_flat.len()).step_by(3) {
+            if i + 2 < edges_flat.len() {
+                let src = edges_flat[i];
+                let dst = edges_flat[i + 1];
+                let weight = edges_flat[i + 2];
+                if src < nodes && dst < nodes {
+                    adj[src].push((dst, weight));
+                }
+            }
         }
         
         // BFS from node 0
@@ -230,7 +276,7 @@ fn graph_processing(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         
         while let Some(node) = queue.pop_front() {
             bfs_order.push(node);
-            for &neighbor in &adj[node] {
+            for &(neighbor, _) in &adj[node] {
                 if !visited[neighbor] {
                     visited[neighbor] = true;
                     queue.push_back(neighbor);
@@ -238,20 +284,32 @@ fn graph_processing(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
             }
         }
         
-        // Simple PageRank
-        let mut pagerank = vec![1.0 / nodes as f64; nodes];
-        for _ in 0..10 {
-            let mut new_rank = vec![0.0; nodes];
-            for node in 0..nodes {
-                let mut rank_sum = 0.0;
-                for &neighbor in &adj[node] {
-                    if !adj[neighbor].is_empty() {
-                        rank_sum += pagerank[neighbor] / adj[neighbor].len() as f64;
-                    }
+        // PageRank (matching FastAPI format)
+        let damping = 0.85f64;
+        let mut ranks = vec![1.0 / nodes as f64; nodes];
+        for _ in 0..iterations {
+            let mut new_ranks = vec![(1.0 - damping) / nodes as f64; nodes];
+            for i in 0..nodes {
+                let share = damping * ranks[i] / adj[i].len().max(1) as f64;
+                for &(to, _) in &adj[i] {
+                    new_ranks[to] += share;
                 }
-                new_rank[node] = 0.15 / nodes as f64 + 0.85 * rank_sum;
             }
-            pagerank = new_rank;
+            ranks = new_ranks;
+        }
+
+        // Build page_rank sorted by rank descending
+        let mut page_rank_pairs: Vec<(usize, f64)> = ranks.into_iter().enumerate().collect();
+        page_rank_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        
+        let page_rank = PyDict::new(py);
+        let mut pr_idx = 0usize;
+        for (node, rank) in page_rank_pairs.iter() {
+            let entry = PyDict::new(py);
+            entry.set_item("node", *node)?;
+            entry.set_item("rank", *rank)?;
+            page_rank.set_item(pr_idx, entry)?;
+            pr_idx += 1;
         }
         
         // Connected components
@@ -265,7 +323,7 @@ fn graph_processing(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
                 while let Some(n) = stack.pop() {
                     if !visited[n] {
                         visited[n] = true;
-                        for &neighbor in &adj[n] {
+                        for &(neighbor, _) in &adj[n] {
                             if !visited[neighbor] {
                                 stack.push(neighbor);
                             }
@@ -276,13 +334,13 @@ fn graph_processing(payload: Py<PyDict>) -> PyResult<Py<PyDict>> {
         }
         
         let result = PyDict::new(py);
-        result.set_item("bfs_nodes_visited", bfs_order.len())?;
-        
-        let mut sorted_pagerank: Vec<(usize, f64)> = pagerank.into_iter().enumerate().collect();
-        sorted_pagerank.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        let top5: Vec<(usize, f64)> = sorted_pagerank.into_iter().take(5).collect();
-        result.set_item("pagerank_top5", top5)?;
-        
+        // Convert bfs_order to Python list
+        let bfs_list = pyo3::types::PyList::empty(py);
+        for &node in &bfs_order {
+            bfs_list.append(node)?;
+        }
+        result.set_item("bfs_order", bfs_list)?;
+        result.set_item("page_rank", page_rank)?;
         result.set_item("connected_components", components)?;
         
         Ok(result.into())

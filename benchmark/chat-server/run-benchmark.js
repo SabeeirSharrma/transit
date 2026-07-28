@@ -586,10 +586,14 @@ async function main() {
   // ── Start additional backends ──
   const grpcClient = new GrpcClient({
     protoPath: resolve(__dirname, "./grpc/proto/benchmark.proto"),
+    host: "127.0.0.1",
+    port: 50052,
     venvPython: resolve(__dirname, "./grpc/.venv/bin/python3"),
     rpcMap: CHAT_GRPC_RPC_MAP,
   });
   const thriftClient = new ThriftClient({
+    host: "127.0.0.1",
+    port: 50054,
     venvPython: resolve(__dirname, "./thrift/.venv/bin/python3"),
     rpcMap: CHAT_THRIFT_RPC_MAP,
   });

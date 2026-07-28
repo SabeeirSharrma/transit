@@ -116,27 +116,27 @@ This document contains benchmark results comparing Transit against other IPC mec
 
 ### Serial (single request, 100 iterations)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | PyO3 | ZeroMQ | Redis Pub/Sub |
-|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|------|--------|---------------|
-| ETL Pipeline (1000 rows) | - | - | - | - | - | - | - | - | - | - | - |
-| Text Analysis (5000 words) | - | - | - | - | - | - | - | - | - | - | - |
-| Matrix Multiply (50x50) | - | - | - | - | - | - | - | - | - | - | - |
-| Matrix Determinant (8x8) | - | - | - | - | - | - | - | - | - | - | - |
-| Graph Processing (500 nodes) | - | - | - | - | - | - | - | - | - | - | - |
-| Fibonacci Memo (n=38) | - | - | - | - | - | - | - | - | - | - | - |
-| SHA-256 Hashing (10K rounds) | - | - | - | - | - | - | - | - | - | - | - |
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub |
+|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|--------|---------------|
+| ETL Pipeline (1000 rows) | - | - | - | - | - | - | - | - | - | - |
+| Text Analysis (5000 words) | - | - | - | - | - | - | - | - | - | - |
+| Matrix Multiply (50x50) | - | - | - | - | - | - | - | - | - | - |
+| Matrix Determinant (8x8) | - | - | - | - | - | - | - | - | - | - |
+| Graph Processing (500 nodes) | - | - | - | - | - | - | - | - | - | - |
+| Fibonacci Memo (n=38) | - | - | - | - | - | - | - | - | - | - |
+| SHA-256 Hashing (10K rounds) | - | - | - | - | - | - | - | - | - | - |
 
 ### Concurrent (10 parallel requests)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | PyO3 | ZeroMQ | Redis Pub/Sub |
-|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|------|--------|---------------|
-| ETL Pipeline (1000 rows) | - | - | - | - | - | - | - | - | - | - | - |
-| Text Analysis (5000 words) | - | - | - | - | - | - | - | - | - | - | - |
-| Matrix Multiply (50x50) | - | - | - | - | - | - | - | - | - | - | - |
-| Matrix Determinant (8x8) | - | - | - | - | - | - | - | - | - | - | - |
-| Graph Processing (500 nodes) | - | - | - | - | - | - | - | - | - | - | - |
-| Fibonacci Memo (n=38) | - | - | - | - | - | - | - | - | - | - | - |
-| SHA-256 Hashing (10K rounds) | - | - | - | - | - | - | - | - | - | - | - |
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub |
+|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|--------|---------------|
+| ETL Pipeline (1000 rows) | - | - | - | - | - | - | - | - | - | - |
+| Text Analysis (5000 words) | - | - | - | - | - | - | - | - | - | - |
+| Matrix Multiply (50x50) | - | - | - | - | - | - | - | - | - | - |
+| Matrix Determinant (8x8) | - | - | - | - | - | - | - | - | - | - |
+| Graph Processing (500 nodes) | - | - | - | - | - | - | - | - | - | - |
+| Fibonacci Memo (n=38) | - | - | - | - | - | - | - | - | - | - |
+| SHA-256 Hashing (10K rounds) | - | - | - | - | - | - | - | - | - | - |
 
 ## Chat Server Benchmark
 
@@ -159,46 +159,48 @@ This document contains benchmark results comparing Transit against other IPC mec
 
 ### Serial (single request, 100 iterations)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | PyO3 | ZeroMQ | Redis Pub/Sub |
-|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|------|--------|---------------|
-| Message Send Pipeline | - | - | - | - | - | - | - | - | - | - | - |
-| Fan-out Delivery | - | - | - | - | - | - | - | - | - | - | - |
-| Session Validation | - | - | - | - | - | - | - | - | - | - | - |
-| Typing Indicator | - | - | - | - | - | - | - | - | - | - | - |
-| Read Receipt | - | - | - | - | - | - | - | - | - | - | - |
-| Presence Update | - | - | - | - | - | - | - | - | - | - | - |
-| AI Content Moderation | - | - | - | - | - | - | - | - | - | - | - |
-| Message Search | - | - | - | - | - | - | - | - | - | - | - |
-| Analytics Pipeline | - | - | - | - | - | - | - | - | - | - | - |
-| Notification Builder | - | - | - | - | - | - | - | - | - | - | - |
-| User Lookup | - | - | - | - | - | - | - | - | - | - | - |
-| Channel History | - | - | - | - | - | - | - | - | - | - | - |
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub |
+|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|--------|---------------|
+| Message Send Pipeline | - | - | - | - | - | - | - | - | - | - |
+| Fan-out Delivery | - | - | - | - | - | - | - | - | - | - |
+| Session Validation | - | - | - | - | - | - | - | - | - | - |
+| Typing Indicator | - | - | - | - | - | - | - | - | - | - |
+| Read Receipt | - | - | - | - | - | - | - | - | - | - |
+| Presence Update | - | - | - | - | - | - | - | - | - | - |
+| AI Content Moderation | - | - | - | - | - | - | - | - | - | - |
+| Message Search | - | - | - | - | - | - | - | - | - | - |
+| Analytics Pipeline | - | - | - | - | - | - | - | - | - | - |
+| Notification Builder | - | - | - | - | - | - | - | - | - | - |
+| User Lookup | - | - | - | - | - | - | - | - | - | - |
+| Channel History | - | - | - | - | - | - | - | - | - | - |
 
 ### Concurrent (10 parallel requests)
 
-| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | PyO3 | ZeroMQ | Redis Pub/Sub |
-|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|------|--------|---------------|
-| Message Send Pipeline | - | - | - | - | - | - | - | - | - | - | - |
-| Fan-out Delivery | - | - | - | - | - | - | - | - | - | - | - |
-| Session Validation | - | - | - | - | - | - | - | - | - | - | - |
-| Typing Indicator | - | - | - | - | - | - | - | - | - | - | - |
-| Read Receipt | - | - | - | - | - | - | - | - | - | - | - |
-| Presence Update | - | - | - | - | - | - | - | - | - | - | - |
-| AI Content Moderation | - | - | - | - | - | - | - | - | - | - | - |
-| Message Search | - | - | - | - | - | - | - | - | - | - | - |
-| Analytics Pipeline | - | - | - | - | - | - | - | - | - | - | - |
-| Notification Builder | - | - | - | - | - | - | - | - | - | - | - |
-| User Lookup | - | - | - | - | - | - | - | - | - | - | - |
-| Channel History | - | - | - | - | - | - | - | - | - | - | - |
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Socket | Subprocess | ZeroMQ | Redis Pub/Sub |
+|-----------|---------|--------------|----------------|--------------|------|--------|-------------|------------|--------|---------------|
+| Message Send Pipeline | - | - | - | - | - | - | - | - | - | - |
+| Fan-out Delivery | - | - | - | - | - | - | - | - | - | - |
+| Session Validation | - | - | - | - | - | - | - | - | - | - |
+| Typing Indicator | - | - | - | - | - | - | - | - | - | - |
+| Read Receipt | - | - | - | - | - | - | - | - | - | - |
+| Presence Update | - | - | - | - | - | - | - | - | - | - |
+| AI Content Moderation | - | - | - | - | - | - | - | - | - | - |
+| Message Search | - | - | - | - | - | - | - | - | - | - |
+| Analytics Pipeline | - | - | - | - | - | - | - | - | - | - |
+| Notification Builder | - | - | - | - | - | - | - | - | - | - |
+| User Lookup | - | - | - | - | - | - | - | - | - | - |
+| Channel History | - | - | - | - | - | - | - | - | - | - |
 
 ## Notes
 
 - All results are in milliseconds (lower is better)
-- `-` indicates not yet measured
+- `-` indicates backend was not available (missing dependencies)
 - Throughput (ops/s) is available in the JSON results files
 - Results vary by hardware and OS
 - Run `./run-all.sh` to regenerate with actual measurements
-- PyO3 results are only available for computational benchmark
+- PyO3 is only available for computational benchmark (Rust FFI from Python)
+- gRPC/Thrift require code generation tools (grpcio-tools, thrift compiler)
+- Redis Pub/Sub requires a running Redis server
 
 ## Running Benchmarks
 

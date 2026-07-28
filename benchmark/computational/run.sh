@@ -61,6 +61,25 @@ npm run build:java
 echo "Installing FastAPI dependencies..."
 npm run install:fastapi
 
+# Install additional backend dependencies
+echo "Installing gRPC dependencies..."
+npm run install:grpc || echo "  ⚠ gRPC setup failed (missing grpcio-tools?)"
+
+echo "Installing Thrift dependencies..."
+npm run install:thrift || echo "  ⚠ Thrift setup failed (missing thrift compiler?)"
+
+echo "Installing Unix Socket dependencies..."
+npm run install:unix-socket || echo "  ⚠ Unix Socket setup failed"
+
+echo "Installing Subprocess dependencies..."
+npm run install:subprocess || echo "  ⚠ Subprocess setup failed"
+
+echo "Installing ZeroMQ dependencies..."
+npm run install:zeromq || echo "  ⚠ ZeroMQ setup failed (missing libzmq?)"
+
+echo "Installing Redis Pub/Sub dependencies..."
+npm run install:redis-pubsub || echo "  ⚠ Redis Pub/Sub setup failed (missing redis?)"
+
 # Run benchmark
 echo "Running benchmark..."
 if [ "$MODE" = "both" ]; then

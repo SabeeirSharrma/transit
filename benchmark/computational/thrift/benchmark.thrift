@@ -1,4 +1,4 @@
-namespace py thrift_computational
+namespace py benchmark_thrift
 
 struct ComputeRequest {
     1: string operation,

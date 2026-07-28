@@ -209,6 +209,161 @@ async function waitForServer(url, maxRetries = 30) {
   return false;
 }
 
+// ─── Output Correctness Validation ───────────────────────────────────────────
+// Prevents "ghost wins" where a backend reports fast times but returns wrong/empty data.
+
+function extractKey(result, operation) {
+  // Extract the comparable part of a result, stripping execution_time_ms and duration_ms.
+  // Different backends wrap results differently — normalize to just the payload.
+  if (!result || typeof result !== "object") return null;
+  const r = { ...result };
+  delete r.execution_time_ms;
+  delete r.duration_ms;
+  // Some backends nest under "result"
+  if (r.result && typeof r.result === "object" && Object.keys(r).length === 1) {
+    return r.result;
+  }
+  return r;
+}
+
+function deepEqual(a, b, path = "") {
+  const diffs = [];
+  if (a === b) return diffs;
+  if (a == null || b == null) {
+    if (a !== b) diffs.push(`${path || "(root)"}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+    return diffs;
+  }
+  if (typeof a !== typeof b) {
+    diffs.push(`${path || "(root)"}: type ${typeof a} vs ${typeof b}`);
+    return diffs;
+  }
+  if (typeof a !== "object") {
+    if (a !== b) diffs.push(`${path || "(root)"}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+    return diffs;
+  }
+  // Array length
+  if (Array.isArray(a) && Array.isArray(b) && a.length !== b.length) {
+    diffs.push(`${path || "(root)"}: array length ${a.length} vs ${b.length}`);
+    return diffs;
+  }
+  // Numeric tolerance for floating-point
+  if (typeof a === "number" && typeof b === "number") {
+    if (Math.abs(a - b) > Math.max(1e-9, Math.abs(a) * 1e-9)) {
+      diffs.push(`${path}: ${a} vs ${b}`);
+    }
+    return diffs;
+  }
+  // Keys
+  const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of [...allKeys].sort()) {
+    const va = a[k];
+    const vb = b[k];
+    if (va === undefined) { diffs.push(`${path}.${k}: missing vs ${JSON.stringify(vb).slice(0, 80)}`); continue; }
+    if (vb === undefined) { diffs.push(`${path}.${k}: ${JSON.stringify(va).slice(0, 80)} vs missing`); continue; }
+    // Skip volatile fields
+    if (k === "readability_score" || k === "avg_sentence_length" || k === "char_count" || k === "shortest_paths") continue;
+    // For PageRank / pagerank_top5 — only compare top-5 node ids, not exact ranks (float precision)
+    if (k === "page_rank" || k === "pagerank_top5") {
+      if (Array.isArray(va) && Array.isArray(vb)) {
+        const idsA = va.slice(0, 5).map(x => typeof x === "object" ? (x.node ?? x[0]) : x).sort((a, b) => a - b);
+        const idsB = vb.slice(0, 5).map(x => typeof x === "object" ? (x.node ?? x[0]) : x).sort((a, b) => a - b);
+        if (JSON.stringify(idsA) !== JSON.stringify(idsB)) {
+          diffs.push(`${path}.${k}: top-5 nodes differ: ${JSON.stringify(idsA)} vs ${JSON.stringify(idsB)}`);
+        }
+        continue;
+      }
+    }
+    diffs.push(...deepEqual(va, vb, path ? `${path}.${k}` : k));
+  }
+  return diffs;
+}
+
+async function validateAllBackends(benchmarks, config) {
+  console.log("\n╔══════════════════════════════════════════════════════════════╗");
+  console.log("║  OUTPUT CORRECTNESS VALIDATION                              ║");
+  console.log("╚══════════════════════════════════════════════════════════════╝\n");
+
+  const validation = {};
+  const allValid = [];
+
+  for (const [key, benchmark] of Object.entries(benchmarks)) {
+    const payload = JSON.parse(benchmark.data());
+    const opName = OP_NAME_MAP[key] || key;
+    const results = {};
+    const errors = {};
+
+    // FastAPI reference
+    try {
+      const body = JSON.parse(benchmark.data());
+      results.fastapi = await httpPost(`http://127.0.0.1:${config.fastapi_port}${benchmark.fastapi_endpoint}`, body);
+    } catch (e) { errors.fastapi = e.message; }
+
+    // Transit/Rust reference
+    try {
+      results.transit_rust = await config.transitClient[benchmark.transit_fn](payload);
+    } catch (e) { errors.transit_rust = e.message; }
+
+    // Additional backends
+    const additionalClients = config.additionalClients || {};
+    for (const [name, client] of Object.entries(additionalClients)) {
+      if (!client) continue;
+      try {
+        const resp = await client.call({ operation: opName, payload });
+        // Extract the result part (strip execution_time_ms)
+        results[name] = resp.result !== undefined ? resp.result : resp;
+      } catch (e) { errors[name] = e.message; }
+    }
+
+    // Validate
+    const baseline = results.fastapi || results.transit_rust;
+    if (!baseline) {
+      validation[key] = { status: "SKIP", reason: "No baseline available", errors };
+      continue;
+    }
+
+    const baselineNorm = extractKey(baseline, key);
+    const mismatches = [];
+    for (const [name, result] of Object.entries(results)) {
+      if (name === "fastapi" || name === "transit_rust") continue;
+      const resultNorm = extractKey(result, key);
+      const diffs = deepEqual(baselineNorm, resultNorm, name);
+      if (diffs.length > 0) {
+        mismatches.push({ backend: name, diffs });
+      }
+    }
+
+    validation[key] = {
+      status: mismatches.length === 0 ? "PASS" : "WARN",
+      backendsChecked: Object.keys(results).length,
+      mismatches,
+      errors,
+    };
+    allValid.push({ key, status: validation[key].status, mismatches });
+  }
+
+  // Print summary
+  for (const [key, v] of Object.entries(validation)) {
+    const icon = v.status === "PASS" ? "✓" : v.status === "WARN" ? "⚠" : "○";
+    const detail = v.status === "WARN"
+      ? ` — ${v.mismatches.map(m => `${m.backend} (${m.diffs.length} diffs)`).join(", ")}`
+      : v.status === "SKIP" ? ` — ${v.reason}` : "";
+    console.log(`  ${icon} ${benchmarks[key].name}${detail}`);
+    if (v.status === "WARN") {
+      for (const m of v.mismatches) {
+        for (const d of m.diffs.slice(0, 3)) {
+          console.log(`      ${m.backend}: ${d}`);
+        }
+      }
+    }
+  }
+
+  const warnCount = allValid.filter(v => v.status === "WARN").length;
+  const passCount = allValid.filter(v => v.status === "PASS").length;
+  console.log(`\n  ${passCount} passed, ${warnCount} warnings, ${allValid.length - passCount - warnCount} skipped\n`);
+
+  return validation;
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────────────
 
 async function runBenchmark(benchmark, mode, config) {
@@ -452,7 +607,7 @@ async function main() {
   const redisClient = new RedisPubSubClient({ host: "127.0.0.1", port: 6379 });
   const pyo3Client = new PyO3Client({
     venvPython: resolve(__dirname, "./fastapi/.venv/bin/python3"),  // reuse fastapi venv
-    modulePath: resolve(__dirname, "./pyo3/target/release/pyo3_benchmark.so"),
+    modulePath: resolve(__dirname, "./pyo3/target/release/libpyo3_benchmark.so"),
   });
 
   // Start backends that need their own servers
@@ -462,7 +617,7 @@ async function main() {
     { name: "Unix Socket",  client: unixSocketClient, venv: null,                           server: "./unix-socket/server.py", cwd: "./unix-socket" },
     { name: "Subprocess",   client: subprocessClient, venv: "./subprocess/.venv/bin/python3", server: null,                  cwd: null },
     { name: "ZeroMQ",       client: zeromqClient,     venv: "./zeromq/.venv/bin/python3",    server: "./zeromq/server.py",    cwd: "./zeromq" },
-    { name: "Redis PubSub", client: redisClient,      venv: null,                           server: null,                   cwd: null },
+    { name: "Redis PubSub", client: redisClient,      venv: "./redis-pubsub/.venv/bin/python3", server: "./redis-pubsub/server.py", cwd: "./redis-pubsub" },
     { name: "PyO3",         client: pyo3Client,       venv: null,                           server: null,                   cwd: null },
   ];
 
@@ -470,9 +625,9 @@ async function main() {
     try {
       process.stdout.write(`  Starting ${backend.name}...`);
       if (backend.server) {
-        const venvPython = resolve(__dirname, backend.venv);
+        const venvPython = backend.venv ? resolve(__dirname, backend.venv) : "python3";
         const serverProc = spawn(venvPython, [backend.server.split("/").pop()], {
-          cwd: resolve(__dirname, backend.cwd),
+          cwd: backend.cwd ? resolve(__dirname, backend.cwd) : undefined,
           stdio: ["ignore", "pipe", "pipe"],
         });
         serverProc.stderr?.on("data", (d) => {
@@ -493,12 +648,29 @@ async function main() {
   console.log("\n✓ All services ready\n");
   console.log(transit.info());
 
+  // ── Correctness validation ──
+  const validationClients = {
+    grpc: grpcClient?.client ? grpcClient : null,
+    thrift: thriftClient?.client ? thriftClient : null,
+    unix_socket: unixSocketClient,
+    subprocess: subprocessClient,
+    zeromq: zeromqClient?.socket ? zeromqClient : null,
+    redis: redisClient?.connected ? redisClient : null,
+    pyo3: pyo3Client?.proc ? pyo3Client : null,
+  };
+  const validation = await validateAllBackends(BENCHMARKS, {
+    fastapi_port: 8000,
+    transitClient: rs,
+    additionalClients: validationClients,
+  });
+
   // Run benchmarks
   const results = {
     timestamp: new Date().toISOString(),
     mode: MODE,
     iterations: ITERATIONS,
     warmup: WARMUP,
+    validation,
     benchmarks: {},
   };
 
@@ -542,7 +714,7 @@ async function main() {
           { name: "Unix Socket",label: "Unix Socket      ", client: unixSocketClient, enabled: true },
           { name: "Subprocess", label: "Subprocess       ", client: subprocessClient, enabled: true },
           { name: "ZeroMQ",     label: "ZeroMQ           ", client: zeromqClient,     enabled: true },
-          { name: "Redis",      label: "Redis Pub/Sub    ", client: redisClient,      enabled: true },
+          { name: "Redis",      label: "Redis Pub/Sub    ", client: redisClient,      enabled: redisClient?.connected },
           { name: "PyO3",       label: "PyO3             ", client: pyo3Client,       enabled: true },
         ];
 
@@ -612,7 +784,7 @@ async function main() {
           { name: "Unix Socket", label: "Unix Socket      ", client: unixSocketClient, enabled: true },
           { name: "Subprocess",  label: "Subprocess       ", client: subprocessClient, enabled: true },
           { name: "ZeroMQ",      label: "ZeroMQ           ", client: zeromqClient,     enabled: true },
-          { name: "Redis",       label: "Redis Pub/Sub    ", client: redisClient,      enabled: true },
+          { name: "Redis",       label: "Redis Pub/Sub    ", client: redisClient,      enabled: redisClient?.connected },
           { name: "PyO3",        label: "PyO3             ", client: pyo3Client,       enabled: true },
         ];
 
@@ -765,6 +937,23 @@ function generateMarkdown(results) {
   md.push(``);
   md.push(`> Generated: ${results.timestamp} | Mode: ${modeLabel} | Iterations: ${results.iterations} | Warmup: ${results.warmup}`);
   md.push(``);
+
+  // ── Validation Summary ──
+  if (results.validation) {
+    md.push(`## Correctness Validation`);
+    md.push(``);
+    md.push(`| Operation | Status | Backends Checked | Notes |`);
+    md.push(`|-----------|--------|------------------|-------|`);
+    for (const [key, v] of Object.entries(results.validation)) {
+      const b = BENCHMARKS[key];
+      const icon = v.status === "PASS" ? "PASS" : v.status === "WARN" ? "WARN" : "SKIP";
+      const notes = v.status === "WARN"
+        ? v.mismatches.map(m => `${m.backend}: ${m.diffs.length} diffs`).join("; ")
+        : v.status === "SKIP" ? v.reason : "All backends match";
+      md.push(`| ${b?.name || key} | ${icon} | ${v.backendsChecked} | ${notes} |`);
+    }
+    md.push(``);
+  }
 
   // ── Serial Table ──
   if (results.mode === "both" || results.mode === "serial") {

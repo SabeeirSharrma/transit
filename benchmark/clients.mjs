@@ -50,16 +50,30 @@ export class GrpcClient {
       oneofs: true,
     });
     const proto = this.grpc.loadPackageDefinition(packageDef);
-    // Find the service dynamically
+    // Find the service dynamically (handles nested packages like `package computational;`)
     let svc = null;
-    for (const [, val] of Object.entries(proto)) {
-      if (val?.service) {
-        const svcObj = Object.values(val.service)[0];
-        if (svcObj) { svc = val; break; }
+    function findService(obj) {
+      if (obj?.service) return obj;
+      for (const val of Object.values(obj || {})) {
+        // Check any non-primitive value (objects AND functions)
+        if (val && typeof val === "object") {
+          const found = findService(val);
+          if (found) return found;
+        }
+        // Functions can also have .service (e.g., gRPC constructor functions)
+        if (typeof val === "function" && val.service) {
+          return val;
+        }
       }
+      return null;
     }
+    svc = findService(proto);
     if (!svc) throw new Error("No service found in proto");
-    const ServiceClient = svc[Object.keys(svc.service)[0]];
+    // When svc is a function (constructor), use it directly as ServiceClient
+    // When svc is an object with .service, the constructor is svc[key]
+    const ServiceClient = typeof svc === "function"
+      ? svc
+      : svc[Object.keys(svc.service)[0]];
     this.client = new ServiceClient(
       `${this.host}:${this.port}`,
       this.grpc.credentials.createInsecure()
@@ -122,6 +136,7 @@ export class ThriftClient {
       stdio: ["ignore", "pipe", "pipe"],
     });
     await new Promise((r) => setTimeout(r, 2000));
+    this.client = true; // Mark as connected (Thrift uses raw TCP per call)
   }
 
   // ── Thrift Binary Protocol helpers ──
@@ -305,11 +320,15 @@ export class ThriftClient {
             fieldId++;
           }
         } else {
-          // Computational style: compute(operation, payload)
+          // Computational style: compute_args { request: ComputeRequest { operation, payload } }
+          // compute_args field 1: request (STRUCT type=12)
+          this._writeFieldHeader(msg, 12, 1);
+          // ComputeRequest struct: operation (STRING field 1) + payload (STRING field 2)
           this._writeFieldHeader(msg, 11, 1); // STRING field, id=1 (operation)
           this._writeString(msg, req.operation);
           this._writeFieldHeader(msg, 11, 2); // STRING field, id=2 (payload as string)
           this._writeString(msg, JSON.stringify(req.payload));
+          this._writeByte(msg, 0); // STOP (end ComputeRequest)
         }
 
         this._writeMessageEnd(msg);
@@ -327,29 +346,40 @@ export class ThriftClient {
         const frameLen = data.readUInt32BE(0);
         if (data.length < 4 + frameLen) return;
 
-        // Parse response
+        // Parse response: compute_result { success: ComputeResponse { result, execution_time_ms } }
         const frameBytes = [...data.slice(4, 4 + frameLen)];
         let offset = 0;
         const msgBegin = this._readMessageBegin(frameBytes, offset);
         offset = msgBegin.offset;
 
-        // Read args struct fields (skip them)
+        // compute_result struct — read field 0 (success: STRUCT, type=12)
+        let foundSuccess = false;
         while (offset < frameBytes.length) {
           const field = this._readByte(frameBytes, offset);
-          if (field.val === 0) { offset = field.offset; break; }
-          offset = this._skipField(frameBytes, field.offset + 2, field.val);
+          if (field.val === 0) break; // STOP
+          const fieldType = field.val;
+          const fieldId = this._readI16(frameBytes, field.offset);
+          offset = fieldId.offset;
+          if (fieldId.val === 0 && fieldType === 12) {
+            // success field (STRUCT type=12) — this is the ComputeResponse
+            foundSuccess = true;
+            // Parse ComputeResponse struct directly
+            const resp = this._parseComputeResponse(frameBytes.slice(offset));
+            socket.destroy();
+            try {
+              const parsed = JSON.parse(resp.result);
+              resolve({ result: parsed, execution_time_ms: resp.execution_time_ms });
+            } catch {
+              resolve({ result: resp.result, execution_time_ms: resp.execution_time_ms });
+            }
+            return;
+          }
+          offset = this._skipField(frameBytes, offset, fieldType);
         }
 
-        // Read result struct
-        const resp = this._parseComputeResponse(frameBytes.slice(offset));
+        // No success field found
         socket.destroy();
-
-        try {
-          const parsed = JSON.parse(resp.result);
-          resolve({ result: parsed, execution_time_ms: resp.execution_time_ms });
-        } catch {
-          resolve({ result: resp.result, execution_time_ms: resp.execution_time_ms });
-        }
+        resolve({ result: null, execution_time_ms: 0 });
       });
 
       socket.on("error", reject);
@@ -425,11 +455,16 @@ export class SubprocessClient {
       this.buffer = lines.pop();
       for (const line of lines) {
         if (!line.trim()) continue;
-        const id = this.counter++;
-        const cb = this.pending.get(id);
-        if (cb) {
-          this.pending.delete(id);
-          cb(JSON.parse(line));
+        try {
+          const resp = JSON.parse(line);
+          const id = resp.id;
+          const cb = id !== undefined ? this.pending.get(id) : undefined;
+          if (cb) {
+            this.pending.delete(id);
+            cb(resp);
+          }
+        } catch {
+          // ignore parse errors on partial lines
         }
       }
     });
@@ -444,7 +479,7 @@ export class SubprocessClient {
     return new Promise((resolve, reject) => {
       const id = this.counter++;
       this.pending.set(id, resolve);
-      this.proc.stdin.write(JSON.stringify(req) + "\n");
+      this.proc.stdin.write(JSON.stringify({ ...req, id }) + "\n");
       // Timeout after 30s
       setTimeout(() => {
         if (this.pending.has(id)) {
@@ -507,13 +542,26 @@ export class RedisPubSubClient {
     this.subscriber = null;
     this.pending = new Map();
     this.counter = 0;
+    this.connected = false;
   }
 
   async start() {
     const { default: Redis } = await import("ioredis");
-    this.client = new Redis({ host: this.host, port: this.port, maxRetriesPerRequest: 3 });
-    this.subscriber = new Redis({ host: this.host, port: this.port, maxRetriesPerRequest: 3 });
-    await this.subscriber.subscribe("benchmark.response");
+    this.client = new Redis({ host: this.host, port: this.port, maxRetriesPerRequest: 3, retryStrategy: () => null });
+    this.subscriber = new Redis({ host: this.host, port: this.port, maxRetriesPerRequest: 3, retryStrategy: () => null });
+    
+    // Suppress unhandled error events — we detect failures via readyCheck
+    this.client.on("error", () => {});
+    this.subscriber.on("error", () => {});
+    
+    try {
+      await this.subscriber.subscribe("benchmark.response");
+    } catch (e) {
+      this.client?.disconnect();
+      this.subscriber?.disconnect();
+      throw new Error(`Redis subscribe failed: ${e.message}`);
+    }
+    
     this.subscriber.on("message", (_channel, message) => {
       const resp = JSON.parse(message);
       const cb = this.pending.get(resp.id);
@@ -523,6 +571,7 @@ export class RedisPubSubClient {
       }
     });
     await new Promise((r) => setTimeout(r, 500));
+    this.connected = true;
   }
 
   call(req) {
@@ -564,30 +613,31 @@ import sys, json, importlib.util, os
 spec = importlib.util.spec_from_file_location("pyo3_benchmark", "${this.modulePath}")
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
+print("READY")
+sys.stdout.flush()
 for line in sys.stdin:
     line = line.strip()
     if not line:
         continue
+    req_id = None
     try:
         req = json.loads(line)
+        req_id = req.get("id")
         operation = req["operation"]
         payload = req["payload"]
         result = mod.compute(operation, payload)
-        # Convert result to JSON-serializable dict
-        out = {}
-        for k, v in result.items():
-            if hasattr(v, 'item'):
-                out[k] = v.item()
-            elif isinstance(v, dict):
-                out[k] = {kk: vv.item() if hasattr(vv, 'item') else vv for kk, vv in v.items()}
-            elif isinstance(v, list):
-                out[k] = [i.item() if hasattr(i, 'item') else i for i in v]
-            else:
-                out[k] = v
-        print(json.dumps({"result": out, "execution_time_ms": result.get("execution_time_ms", 0)}))
+        # result is already a dict from PyO3 — just extract fields
+        out = result.get("result", result)
+        resp = {"result": out, "execution_time_ms": result.get("execution_time_ms", 0)}
+        if req_id is not None:
+            resp["id"] = req_id
+        print(json.dumps(resp))
         sys.stdout.flush()
     except Exception as e:
-        print(json.dumps({"error": str(e)}))
+        resp = {"error": str(e)}
+        if req_id is not None:
+            resp["id"] = req_id
+        print(json.dumps(resp))
         sys.stdout.flush()
 `;
     const wrapperPath = "/tmp/pyo3_benchmark_wrapper.py";
@@ -596,28 +646,58 @@ for line in sys.stdin:
     this.proc = spawn(this.venvPython, [wrapperPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
+    this.proc.on("exit", (code, signal) => {
+      console.error(`[pyo3] Process exited (code=${code}, signal=${signal})`);
+    });
     this.proc.stdout.on("data", (chunk) => {
       this.buffer += chunk.toString();
       const lines = this.buffer.split("\n");
       this.buffer = lines.pop();
       for (const line of lines) {
         if (!line.trim()) continue;
-        const id = this.counter++;
-        const cb = this.pending.get(id);
-        if (cb) {
-          this.pending.delete(id);
-          cb(JSON.parse(line));
+        if (line.trim() === "READY") {
+          this._readyResolve?.();
+          continue;
+        }
+        try {
+          const resp = JSON.parse(line);
+          const id = resp.id;
+          const cb = id !== undefined ? this.pending.get(id) : undefined;
+          if (cb) {
+            this.pending.delete(id);
+            cb(resp);
+          }
+        } catch {
+          // ignore parse errors on partial lines
         }
       }
     });
-    await new Promise((r) => setTimeout(r, 1000));
+    this.proc.stderr?.on("data", (d) => {
+      process.stderr.write(`[pyo3] ${d}`);
+    });
+    // Wait for READY signal or timeout
+    await new Promise((resolve, reject) => {
+      this._readyResolve = resolve;
+      const timeout = setTimeout(() => {
+        reject(new Error("PyO3 process did not print READY within 10s — import likely failed"));
+      }, 10000);
+      this.proc.on("exit", (code) => {
+        if (code !== 0 && code !== null) {
+          clearTimeout(timeout);
+          reject(new Error(`PyO3 process exited with code ${code} during startup`));
+        }
+      });
+    });
   }
 
   call(req) {
     return new Promise((resolve, reject) => {
+      if (!this.proc || this.proc.exitCode !== null) {
+        return reject(new Error("PyO3 process is not running"));
+      }
       const id = this.counter++;
       this.pending.set(id, resolve);
-      this.proc.stdin.write(JSON.stringify(req) + "\n");
+      this.proc.stdin.write(JSON.stringify({ ...req, id }) + "\n");
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
