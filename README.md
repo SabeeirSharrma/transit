@@ -2,7 +2,7 @@
 
 **Languages that just talk to each other. No API. No middleman.**
 
-Transit lets you write functions in Rust, Java, or Python — then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
+Transit lets you write functions in Rust, Java, or Python and then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
 
 For full docs, go to: <https://sabeeir.qd.je/transit>
 
@@ -26,15 +26,23 @@ const pythonResult = await py.analyzeData(javaResult)
 ## Transit - Benchmarks
 
 Below are the results of an automated benchmark test comparing Transit against FastAPI, gRPC, Thrift, Unix Socket, Subprocess, ZeroMQ, Redis Pub/Sub, and PyO3.
+These benchmarks check **Operations performed per second**, **Speed of output** and **Correctness of output (To prevent inflated/unfair numbers)**.
 
 If you would like to benchmark on your own hardware, you can switch to the [Benchmark Branch](https://github.com/sabeeirsharrma/transit/tree/benchmark/)
+
+**Performed on:**
+
+- CPU: Ryzen 7 4800H @ 2.90GHz
+- GPU0: NVIDIA GTX 1650Ti [Discrete]
+- GPU1: AMD Radeon Vega Series / Radeon Vega Mobile Series [Integrated]
+- RAM: 32GB DDR4 @ 3200MHz [SODIMM]
 
 ### Compute Benchmarks
 
 #### Serial Results (single request, 100 iterations)
 
 | Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
-|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ETL Pipeline** | 2.06ms | 0.29ms | 0.40ms | 2.47ms | 2.37ms | 1.89ms | 2.10ms | 0.61ms | **Transit/Rust** (7.2x faster) |
 | **Text Analysis** | 15.78ms | 0.71ms | 0.41ms | 14.30ms | 26.62ms | 11.86ms | 12.16ms | 2.52ms | **Transit/Java** (38.1x faster) |
 | **Matrix Multiply** | 28.85ms | 1.19ms | 1.24ms | 20.18ms | 54.59ms | 18.27ms | 18.28ms | 3.80ms | **Transit/Rust** (24.2x faster) |
@@ -46,7 +54,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 #### Concurrent Results (10 parallel requests)
 
 | Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
-|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **ETL Pipeline** | 15.35ms | 1.44ms | 1.89ms | 13.16ms | 6.55ms | 1.26ms | 3.65ms | 1.08ms | **PyO3** (14.2x faster) |
 | **Text Analysis** | 131.42ms | 3.61ms | 3.99ms | 177.89ms | 174.62ms | 6.38ms | 61.35ms | 9.90ms | **Transit/Rust** (36.4x faster) |
 | **Matrix Multiply** | 227.63ms | 5.83ms | 7.24ms | 222.78ms | 239.70ms | 10.55ms | 80.37ms | 17.94ms | **Transit/Rust** (39.0x faster) |
@@ -57,11 +65,10 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 
 ### Chat Server Benchmark
 
-
-#### Chat Server Results (Serial — single request, 100 iterations)
+#### Chat Server Results (Serial - single request, 100 iterations)
 
 | Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
-|-----------|---------|--------------|----------------|--------------|------|--------|-----------|------------|--------|-------|--------|
+| ----------- | --------- | -------------- | ---------------- | -------------- | ------ | -------- | ----------- | ------------ | -------- | ------- | -------- |
 | Message Send Pipeline (auth+mod+route+persist) | 1.29ms | 0.01ms | 0.17ms | 0.26ms | 0.17ms | 0.13ms | 0.28ms | 0.05ms | 0.11ms | 0.57ms | **Transit/Rust** (117.3x faster) |
 | Fan-out Delivery (50 recipients) | 0.86ms | 0.01ms | 0.20ms | 0.16ms | 0.25ms | 0.14ms | 0.32ms | 0.05ms | 0.12ms | 0.45ms | **Transit/Rust** (85.9x faster) |
 | Session Validation | 0.87ms | 0.00ms | 0.15ms | 0.12ms | 0.19ms | 0.13ms | 0.20ms | 0.04ms | 0.12ms | 0.45ms | **Transit/Rust** (238.6x faster) |
@@ -74,7 +81,6 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 | Notification Builder (20 users) | 0.98ms | 0.02ms | 0.14ms | 0.18ms | 0.12ms | 0.09ms | 0.22ms | 0.06ms | 0.13ms | 0.50ms | **Transit/Rust** (42.5x faster) |
 | User Lookup | 0.74ms | 0.00ms | 0.14ms | 0.12ms | 0.14ms | 0.11ms | 0.25ms | 0.04ms | 0.10ms | 0.53ms | **Transit/Rust** (313.5x faster) |
 | Channel History (50 messages) | 1.86ms | 0.00ms | 0.12ms | 0.12ms | 0.09ms | 0.07ms | 0.20ms | 0.05ms | 0.11ms | 0.54ms | **Transit/Rust** (374.9x faster) |
-
 
 ## Quick Start
 
@@ -94,7 +100,7 @@ Requirements:
 
 ### 2. Write functions in any supported language
 
-**Rust** — write normal `pub fn` functions:
+**Rust** - write normal `pub fn` functions:
 
 ```rust
 // rust/src/lib.rs
@@ -103,7 +109,7 @@ pub fn process_job(data: Vec<u8>) -> String {
 }
 ```
 
-**Java** — write public methods that take and return JSON strings:
+**Java** - write public methods that take and return JSON strings:
 
 ```java
 // java/src/main/java/com/example/App.java
@@ -114,7 +120,7 @@ public class App {
 }
 ```
 
-**Python** — write functions that take and return JSON strings:
+**Python** - write functions that take and return JSON strings:
 
 ```python
 # python/service.py
@@ -134,7 +140,7 @@ const rs = transit.rust(resolve(__dirname, "./rust"))
 const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
 const py = transit.python(resolve(__dirname, "./python"))
 
-// Call functions — they appear as normal async methods
+// Call functions - they appear as normal async methods
 await rs.processJob([72, 101, 108])       // → Rust
 await jv.processJob({"data": [1, 2]})     // → Java
 await py.processData({"items": [10, 20]}) // → Python
@@ -156,12 +162,12 @@ transit.info()
 
 Transit has three components:
 
-1. **Scanner** — uses tree-sitter to scan your source code and find exported functions automatically
-2. **Bridges** — transport layers that connect JS to each language:
-   - **Rust**: in-process native addon (zero overhead)
-   - **Java**: persistent TCP process on localhost
-   - **Python**: persistent TCP process on localhost
-3. **Proxy** — a JS `Proxy` that makes cross-language calls look like normal function calls
+1. **Scanner:** Uses tree-sitter to scan your source code and find exported functions automatically
+2. **Bridges:** Transport layers that connect JS to each language:
+   - **Rust:** In-process native addon (zero overhead)
+   - **Java:** Persistent TCP process on localhost
+   - **Python:** Persistent TCP process on localhost
+3. **Proxy:** A JS `Proxy` that makes cross-language calls look like normal function calls
 
 You never write serialization code or API routes. Just point Transit at a directory.
 
@@ -199,7 +205,7 @@ Proxy resolves function name against scanner manifest
 ```
 transit/
   packages/
-    transit-js/                 # Public API — transit.rust(), transit.java(), transit.python()
+    transit-js/                 # Public API - transit.rust(), transit.java(), transit.python()
     transit-scanner/            # Rust tree-sitter scanner (native addon)
     transit-schema/             # Shared types and config
     transit-rust-runtime/       # napi-rs bridge for in-process Rust calls
@@ -239,16 +245,12 @@ node examples/js-rust-java-demo/js/index.js
 
 ## Docs
 
-- [Getting Started](docs/getting-started.md) — step-by-step walkthrough for beginners
-- [API Reference](docs/api-reference.md) — full API documentation
-- [Architecture](docs/architecture.md) — system design deep dive
-- [Binary Protocol](docs/binary-protocol.md) — wire format for JS ↔ Java/Python
-- [Export Tiers](docs/export-tiers.md) — function discovery system
-- [Contributing](docs/contributing.md) — development guide
-
-## Status
-
-v0.1 — Working end-to-end: JS → Rust, JS → Java, and JS → Python all functional. CLI with init, dev, build, and start commands. Codegen for typed stubs.
+- [Getting Started](docs/getting-started.md) - step-by-step walkthrough for beginners
+- [API Reference](docs/api-reference.md) - full API documentation
+- [Architecture](docs/architecture.md) - system design deep dive
+- [Binary Protocol](docs/binary-protocol.md) - wire format for JS ↔ Java/Python
+- [Export Tiers](docs/export-tiers.md) - function discovery system
+- [Contributing](docs/contributing.md) - development guide
 
 ## License
 
