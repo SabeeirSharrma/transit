@@ -15,6 +15,7 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import BenchmarkChart from '../../components/BenchmarkChart.astro';
 
 ## Why Transit?
 
@@ -33,6 +34,12 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 	</Card>
 </CardGrid>
 
+## Blazing Fast Performance
+
+Transit/Rust eliminates IPC overhead with zero-copy serialization, offering up to or more than **100x better performance**`*` than standard HTTP or RPC microservices.
+
+<BenchmarkChart />
+
 ## Quick Taste
 
 ```js
@@ -50,3 +57,5 @@ const rustResult = await rs.processFile({ id: "job-001", bytes: [72, 101, 108] }
 const javaResult = await jv.handleSpecialized(rustResult)
 const pythonResult = await py.analyzeData(javaResult)
 ```
+
+`* performance is dependent on hardware, language and other factors`
