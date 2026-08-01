@@ -68,6 +68,7 @@ export class JavaProcessManager {
   private readyPromise: Promise<void> | null = null;
   private stopping = false;
   private nameCache = new Map<string, string>();
+  private fnNameCache = new Map<string, Buffer>();
 
   constructor(options: JavaProcessOptions) {
     this.options = {
@@ -245,6 +246,9 @@ export class JavaProcessManager {
   /**
    * Call a Java function.
    * Converts snake_case names to camelCase (Java server registers camelCase names).
+   *
+   * Returns raw string result — caller parses JSON only if needed.
+   * This avoids per-call JSON.parse + try/catch overhead in the hot path.
    */
   async callFunction(functionName: string, argsJson: string): Promise<string> {
     if (!this.ready || this.sockets.length === 0) {
@@ -258,14 +262,18 @@ export class JavaProcessManager {
       this.nameCache.set(functionName, javaName);
     }
 
-    // Encode CALL_REQUEST
-    const fnBytes = Buffer.from(javaName, "utf-8");
+    // Pre-encode fn name once and cache (hot path optimization)
+    let fnBytes = this.fnNameCache.get(javaName);
+    if (fnBytes === undefined) {
+      fnBytes = Buffer.from(javaName, "utf-8");
+      this.fnNameCache.set(javaName, fnBytes);
+    }
     const argsBytes = Buffer.from(argsJson, "utf-8");
 
     const payloadSize = 2 + fnBytes.length + 4 + argsBytes.length;
     const requestId = ++this.requestIdCounter;
 
-    const message = Buffer.alloc(HEADER_SIZE + payloadSize);
+    const message = Buffer.allocUnsafe(HEADER_SIZE + payloadSize);
     let offset = 0;
 
     // Header
@@ -282,22 +290,17 @@ export class JavaProcessManager {
 
     const response = await this.sendRaw(message);
 
-    // Decode CALL_RESPONSE
-    const status = response.readUInt8(10);
-    const resultLen = response.readInt32LE(11);
+    // Decode CALL_RESPONSE — zero-copy: read directly from response buffer
+    const status = response[10]; // readUInt8 inline (avoids method call overhead)
+    const resultLen = (response[11] | (response[12] << 8) |
+                       (response[13] << 16) | (response[14] << 24)); // readInt32LE inline
     const result = response.subarray(15, 15 + resultLen).toString("utf-8");
 
     if (status === STATUS_ERROR) {
-      const parsed = JSON.parse(result);
-      throw new Error(parsed.error || "Java function returned error");
+      throw new Error(JSON.parse(result).error || "Java function returned error");
     }
 
-    // Auto-parse JSON results to return native JS objects (consistent with Rust bridge)
-    try {
-      return JSON.parse(result);
-    } catch {
-      return result; // Not JSON — return raw string (e.g., plain text responses)
-    }
+    return result;
   }
 
   /**
@@ -349,7 +352,7 @@ export class JavaProcessManager {
       chunk.copy(buffer, offset);
       offset += chunk.length;
 
-      // Process complete messages
+      // Process complete messages — avoid Buffer.from copy, use subarray directly
       let consumed = 0;
       while (offset - consumed >= HEADER_SIZE) {
         const payloadLen = buffer.readUInt32LE(consumed + 6);
@@ -357,16 +360,16 @@ export class JavaProcessManager {
 
         if (offset - consumed < totalLen) break; // incomplete message
 
-        const message = Buffer.from(buffer.subarray(consumed, consumed + totalLen));
-        consumed += totalLen;
-
-        const requestId = message.readUInt32LE(2);
+        const requestId = buffer.readUInt32LE(consumed + 2);
         const pending = this.pending.get(requestId);
         if (pending) {
           this.pending.delete(requestId);
           clearTimeout(pending.timer);
-          pending.resolve(message);
+          // Pass subarray view directly — caller toString()s it immediately,
+          // so the compact below won't corrupt it before it's consumed.
+          pending.resolve(buffer.subarray(consumed, consumed + totalLen));
         }
+        consumed += totalLen;
       }
 
       // Compact: shift unconsumed data to front
