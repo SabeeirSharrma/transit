@@ -281,7 +281,7 @@ public class ChatService {
         System.out.println("PORT=" + port);
         System.out.flush();
 
-        ExecutorService exec = Executors.newFixedThreadPool(Math.min(Runtime.getRuntime().availableProcessors(), 8));
+        ExecutorService exec = Executors.newCachedThreadPool();
         AtomicBoolean running = new AtomicBoolean(true);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

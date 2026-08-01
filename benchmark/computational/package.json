@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "transit-cli": "^2.4.0",
-    "@sabeeirsharrma/transit": "^2.4.0",
+    "transit-cli": "^2.5.0",
+    "@sabeeirsharrma/transit": "^2.5.0",
     "@grpc/grpc-js": "^1.10.0",
     "@grpc/proto-loader": "^0.7.10",
     "zeromq": "^6.0.0-beta.16",
