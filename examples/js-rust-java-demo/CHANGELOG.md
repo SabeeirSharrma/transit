@@ -1,5 +1,12 @@
 # js-rust-java-demo
 
+## 2.5.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/transit@2.6.0
+
 ## 2.5.0
 
 ### Minor Changes
