@@ -28,6 +28,7 @@ const pythonResult = await py.analyzeData(javaResult)
 Below are the results of an automated benchmark test comparing Transit against FastAPI, gRPC, Thrift, Unix Socket, Subprocess, ZeroMQ, Redis Pub/Sub, and PyO3.
 These benchmarks check **Operations performed per second**, **Speed of output** and **Correctness of output (To prevent inflated/unfair numbers)**.
 
+**Results may vary depending on hardware and setup**
 If you would like to benchmark on your own hardware, you can switch to the [Benchmark Branch](https://github.com/sabeeirsharrma/transit/tree/benchmark/)
 
 **Performed on:**
