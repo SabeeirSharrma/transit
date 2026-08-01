@@ -428,7 +428,7 @@ async function main() {
 
   // Start Transit
   const rs = transit.rust(resolve(__dirname, "./transit/rust"));
-  const py = transit.python(resolve(__dirname, "./transit/python"));
+  const py = transit.python(resolve(__dirname, "./transit/python"), { env: { TRANSIT_USE_ORJSON: "1" } });
 
   // Start Java
   console.log("  Compiling Java...");
