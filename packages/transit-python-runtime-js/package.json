@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/python-runtime",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Node.js bridge for Transit Python resident-process",
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@sabeeirsharrma/py-runtime": "^2.5.0"
+    "@sabeeirsharrma/py-runtime": "^2.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

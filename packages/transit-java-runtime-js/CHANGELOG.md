@@ -1,5 +1,11 @@
 # @sabeeirsharrma/java-runtime
 
+## 2.6.0
+
+### Minor Changes
+
+- Performance: removed JSON.parse from Python and Java bridge callFunction hot paths, added fnNameCache for zero-allocation function name encoding, replaced Buffer.alloc with Buffer.allocUnsafe, inlined buffer reads for faster response decoding, changed response handlers to use subarray views instead of Buffer.from copies, added env passthrough for Python bridge, and made Python server write_lock conditional for single-client connections.
+
 ## 2.5.0
 
 ### Minor Changes

@@ -495,12 +495,14 @@ class PythonDevBridge implements RuntimeBridge {
   private maxRestarts: number;
   private serverScript?: string;
   private buildOverride?: BuildOverride;
+  private extraEnv?: Record<string, string>;
 
-  constructor(dir: string, maxRestarts: number = 3, serverScript?: string, buildOverride?: BuildOverride) {
+  constructor(dir: string, maxRestarts: number = 3, serverScript?: string, buildOverride?: BuildOverride, extraEnv?: Record<string, string>) {
     this.dir = resolve(dir);
     this.maxRestarts = maxRestarts;
     this.serverScript = serverScript;
     this.buildOverride = buildOverride;
+    this.extraEnv = extraEnv;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -526,8 +528,8 @@ class PythonDevBridge implements RuntimeBridge {
 
     const { PythonProcessManager } = await import("@sabeeirsharrma/python-runtime");
 
-    // Build extra env vars from config
-    const env: Record<string, string> = {};
+    // Build extra env vars from config + caller-provided env
+    const env: Record<string, string> = { ...this.extraEnv };
     if (this.buildOverride?.fastJson) {
       env.TRANSIT_USE_ORJSON = "1";
     }
@@ -662,12 +664,12 @@ class Transit {
     return handle;
   }
 
-  python(dir: string, options?: { serverScript?: string }): FunctionProxy {
+  python(dir: string, options?: { serverScript?: string; env?: Record<string, string> }): FunctionProxy {
     const key = `python:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
     const buildOverride = this._config.build?.python;
-    const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript, buildOverride);
+    const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript, buildOverride, options?.env);
     this.bridges.push(bridge);
     this.registerShutdown();
     const manifest = scanDirectorySync(dir);
