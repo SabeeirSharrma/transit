@@ -383,9 +383,9 @@ async function main() {
   // Force Python transit server to use TCP (bridge doesn't support UDS)
   process.env.TRANSIT_TRANSPORT = "tcp";
 
-  console.log("╔══════════════════════════════════════════════════════════════╗");
-  console.log("║  Chat Server Benchmark: Transit (Binary) vs FastAPI (JSON)  ║");
-  console.log("╚══════════════════════════════════════════════════════════════╝\n");
+  console.log("╔═══════════════════════════════════════════════════════════════════════╗");
+  console.log("║  Chat Server Benchmark: Transit (Binary) vs Others (JSON/RPC/Server)  ║");
+  console.log("╚═══════════════════════════════════════════════════════════════════════╝\n");
 
   // Start FastAPI
   console.log("Starting FastAPI server...");

@@ -82,32 +82,35 @@ export class GrpcClient {
 
   call(req) {
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("gRPC call timed out")), 10000);
+      const done = (err, resp) => {
+        clearTimeout(timer);
+        if (err) return reject(err);
+        resolve(resp);
+      };
       if (this.rpcMap && req.operation && this.rpcMap[req.operation]) {
         // Operation-specific RPC (chat-server style)
         const rpcDef = this.rpcMap[req.operation];
         const requestMsg = {};
-        // Map payload fields to protobuf message fields
         for (const [k, v] of Object.entries(req.payload || {})) {
           requestMsg[k] = v;
         }
-        this.client[rpcDef.method](requestMsg, (err, resp) => {
-          if (err) return reject(err);
-          resolve(resp);
-        });
+        this.client[rpcDef.method](requestMsg, done);
       } else if (req.operation !== undefined) {
         // Generic Compute RPC (computational benchmark style)
         this.client.Compute(
           { operation: req.operation, payload: Buffer.from(JSON.stringify(req.payload)) },
           (err, resp) => {
-            if (err) return reject(err);
+            if (err) return done(err);
             try {
-              resolve({ result: JSON.parse(resp.result.toString()), execution_time_ms: resp.execution_time_ms });
+              done(null, { result: JSON.parse(resp.result.toString()), execution_time_ms: resp.execution_time_ms });
             } catch {
-              resolve({ result: resp.result.toString(), execution_time_ms: resp.execution_time_ms });
+              done(null, { result: resp.result.toString(), execution_time_ms: resp.execution_time_ms });
             }
           }
         );
       } else {
+        clearTimeout(timer);
         reject(new Error("GrpcClient.call expects {operation, payload}"));
       }
     });
@@ -284,6 +287,11 @@ export class ThriftClient {
 
   call(req) {
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error("Thrift call timed out"));
+      }, 10000);
+
       const methodName = this.rpcMap && req.operation && this.rpcMap[req.operation]
         ? this.rpcMap[req.operation].method
         : "compute";
@@ -365,6 +373,7 @@ export class ThriftClient {
             foundSuccess = true;
             // Parse ComputeResponse struct directly
             const resp = this._parseComputeResponse(frameBytes.slice(offset));
+            clearTimeout(timer);
             socket.destroy();
             try {
               const parsed = JSON.parse(resp.result);
@@ -378,11 +387,15 @@ export class ThriftClient {
         }
 
         // No success field found
+        clearTimeout(timer);
         socket.destroy();
         resolve({ result: null, execution_time_ms: 0 });
       });
 
-      socket.on("error", reject);
+      socket.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
   }
 
@@ -407,6 +420,11 @@ export class UnixSocketClient {
 
   call(req) {
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error("UnixSocket call timed out"));
+      }, 10000);
+
       const socket = net.createConnection({ path: this.socketPath }, () => {
         const payload = Buffer.from(JSON.stringify(req));
         const frame = Buffer.alloc(4 + payload.length);
@@ -422,11 +440,15 @@ export class UnixSocketClient {
         const frameLen = data.readUInt32BE(0);
         if (data.length < 4 + frameLen) return;
         const resp = JSON.parse(data.slice(4, 4 + frameLen).toString());
+        clearTimeout(timer);
         socket.destroy();
         resolve(resp);
       });
 
-      socket.on("error", reject);
+      socket.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
   }
 
@@ -521,9 +543,15 @@ export class ZeroMQClient {
   }
 
   async call(req) {
-    await this.socket.send(JSON.stringify(req));
-    const [response] = await this.socket.receive();
-    return JSON.parse(response.toString());
+    const result = await Promise.race([
+      (async () => {
+        await this.socket.send(JSON.stringify(req));
+        const [response] = await this.socket.receive();
+        return JSON.parse(response.toString());
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("ZeroMQ call timed out")), 5000)),
+    ]);
+    return result;
   }
 
   async close() {

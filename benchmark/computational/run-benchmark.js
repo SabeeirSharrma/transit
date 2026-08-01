@@ -506,9 +506,9 @@ async function runConcurrentAdditionalBenchmark(benchmark, client, concurrency) 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log("╔══════════════════════════════════════════════════════════════╗");
-  console.log("║  Benchmark: Transit (Binary Protocol) vs FastAPI (JSON)     ║");
-  console.log("╚══════════════════════════════════════════════════════════════╝\n");
+  console.log("╔════════════════════════════════════════════════════════════════════╗");
+  console.log("║  Benchmark: Transit (Binary Protocol) vs Others (JSON/RPC/Server)  ║");
+  console.log("╚════════════════════════════════════════════════════════════════════╝\n");
 
   // Start FastAPI (using uv-managed venv)
   console.log("Starting FastAPI server...");
