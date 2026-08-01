@@ -1,352 +1,310 @@
-# Transit Benchmark Feedback
+# Transit Showcase Demo — Feedback
 
-## Issue: Python Worker Infinite Respawn Loop
-
-**Severity:** Critical — benchmark cannot complete
-**Date:** 2026-07-27
-**Component:** `@sabeeirsharrma/python-runtime` (PythonProcessManager) + Python TransitServer
+**Date:** 2026-07-31
+**Context:** Building a self-contained demo at `demo/` that calls Rust, Python, and Java from a single `index.js`.
 
 ---
 
-## Symptom
+## Issue 1: Java Thread Pool Deadlock
 
-When running `./run-all.sh`, the Transit/Python benchmark hangs during the first test (ETL Pipeline). The output shows dozens of new Python processes being spawned in rapid succession, each printing:
+**Severity:** Critical — Java calls hang indefinitely
+**Component:** `transit-java-runtime` / `TransitServer.java`
 
+### Symptom
+
+After the Node.js client connects 8 sockets to the Java server, all function calls hang. No error, no timeout — just silence.
+
+### Root Cause
+
+`TransitServer.java` creates a single `FixedThreadPool(min(cores, 8))` and submits **both** `handleClient` tasks (one per socket connection) **and** `handleCall` tasks (one per request) to the same pool.
+
+With 8 socket connections and a pool of 8 threads:
+1. All 8 threads are occupied by `handleClient` (blocked on `readExact()`)
+2. When a request arrives, `handleClient` submits `handleCall` to the same pool
+3. No threads are available → `handleCall` queues forever
+4. `handleClient` loops back to `readExact()` → **deadlock**
+
+### Fix
+
+Use `Executors.newCachedThreadPool()` instead of `FixedThreadPool`. This lets the pool grow dynamically so `handleCall` tasks are never starved.
+
+**Patched file:** `demo/java/lib/transit/java/TransitServer.java`
+
+```java
+// BEFORE (deadlock-prone):
+private final ExecutorService executor = Executors.newFixedThreadPool(
+    Math.min(Runtime.getRuntime().availableProcessors(), 8)
+);
+
+// AFTER:
+private final ExecutorService executor = Executors.newCachedThreadPool();
 ```
-[benchmark-py] Server listening on UDS /tmp/transit-XXXXX.sock
-[benchmark-py] Registered 7 functions
-```
 
-with different PIDs and socket paths. The benchmark never progresses past this point and must be killed with Ctrl+C.
+### Recommendation
+
+Fix this in the published `transit-java-runtime`. The `FixedThreadPool` with size matching the Node.js connection pool size (`min(cpus, 8)`) is an inherent deadlock trap.
 
 ---
 
-## Root Cause: Protocol Mismatch Between Python Server and Node.js Manager
+## Issue 2: Java Runtime Not Included in npm Package
 
-The Python `TransitServer` and the Node.js `PythonProcessManager` disagree on the transport protocol:
+**Severity:** High — Java users must manually download source files from the monorepo
+**Component:** `@sabeeirsharrma/java-runtime`
 
-| Component | Preferred Transport | Stdout Signal |
-|---|---|---|
-| Python `TransitServer` | **UDS** (Unix Domain Socket) — tried first on Linux/macOS | `SOCKET=/tmp/transit-XXXXX.sock` |
-| Node.js `PythonProcessManager` | **TCP** only | Looks for `PORT=XXXX` |
+### Symptom
 
-### The Loop
+After `bun install @sabeeirsharrma/transit`, the Java runtime package contains only TypeScript/JS bridge code — no `.java` source files. Users must manually download `TransitServer.java`, `BinaryProtocol.java`, and `TransitService.java` from the GitHub monorepo and compile them.
 
-1. Node.js spawns the Python process.
-2. Python successfully binds to a UDS socket (faster than TCP on Linux).
-3. Python prints `SOCKET=/tmp/transit-XXXXX.sock` on stdout.
-4. Node.js `waitForPort()` (line 132–151 of `python-runtime/dist/index.js`) scans stdout looking for the regex `/PORT=(\d+)/`.
-5. No `PORT=` line ever appears → `waitForPort()` times out after `connectTimeout` (default 10s).
-6. Node.js kills the Python process (or it crashes on timeout).
-7. `maybeRestart()` is called → spawns a new Python process → back to step 2.
+### What Users Have to Do
 
-This repeats up to `maxRestarts` (default 3) times, but because the health check timer also fires and triggers restarts, it can loop far more than that in practice.
+```bash
+# Download Java runtime sources manually
+mkdir -p java/lib/transit/java
+curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java" --output-dir java/lib/transit/java/
+curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java" --output-dir java/lib/transit/java/
+curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java" --output-dir java/lib/transit/java/
 
-### Why UDS Is Preferred
+# Compile Java runtime
+mkdir -p java/build
+javac -d java/build java/lib/transit/java/*.java
 
-In `service.py` lines 401–419:
+# Compile user code against the runtime
+javac -cp java/build -d java/build java/src/main/java/com/demo/*.java
+```
+
+### Recommendation
+
+Include the compiled `.class` files (or the `.java` sources) in the npm package under a `java/` or `lib/` directory. Users should only need to compile their own code, not the framework.
+
+---
+
+## Issue 3: Python `transit_server.py` Not Included in npm Package
+
+**Severity:** High — Python users must manually copy the server file
+**Component:** `@sabeeirsharrma/python-runtime`
+
+### Symptom
+
+After `bun install @sabeeirsharrma/transit`, there is no `transit_server.py` anywhere in `node_modules`. Users must know to copy it from the monorepo:
+
+```bash
+cp node_modules/@sabeeirsharrma/transit/packages/transit-py-runtime/transit_server.py python/
+```
+
+But this path doesn't exist in the published package either — the `packages/` directory isn't published.
+
+### What I Did
+
+I fetched the full `transit_server.py` source from GitHub and bundled it directly in the demo's `python/` directory. This is a 250+ line file that users shouldn't have to hunt for.
+
+### Recommendation
+
+Either:
+1. Include `transit_server.py` in the `@sabeeirsharrma/python-runtime` package
+2. Or have `transit.python()` automatically copy/proxy it to the user's Python directory on first call
+
+---
+
+## Issue 4: Transit Wraps Args in Arrays
+
+**Severity:** Medium — breaks naive JSON parsers in user code
+**Component:** `transit-java-runtime` / `transit-py-runtime` (protocol layer)
+
+### Symptom
+
+When calling `jv.processRecord({ id: "test", value: 42 })` from JS, the Java function receives:
+
+```json
+[{"id":"test","value":42}]
+```
+
+Not:
+
+```json
+{"id":"test","value":42}
+```
+
+Similarly, `jv.computeStats({ values: [1, 2, 3] })` sends:
+
+```json
+[{"values":[1,2,3]}]
+```
+
+### Impact
+
+Any Java/Python function that does naive JSON parsing (e.g., `json.loads(args)` and immediately accessing keys) will fail silently — getting `null` for all fields and defaulting to fallback values.
+
+In my demo, this caused `processRecord` to return `"id":"unknown"` and `"value":0.0` for every record until I added array-unwrapping logic.
+
+### Recommendation
+
+Document this behavior prominently in the API reference. The current docs show:
 
 ```python
-if hasattr(socket, "AF_UNIX") and sys.platform != "win32":
-    self._socket_path = f"/tmp/transit-{os.getpid()}.sock"
-    # ... binds UDS, prints SOCKET=, enters accept loop, returns
+def process_data(args_json):
+    args = json.loads(args_json)
+    items = args.get("items", [])
 ```
 
-UDS is a valid optimization — it avoids TCP overhead (loopback NIC, Nagle's algorithm, etc.). The problem is that the **client side doesn't know how to consume it**.
-
----
-
-## Why This Only Affects Python
-
-- **Rust**: In-process native addon (N-API). No process spawning, no protocol negotiation.
-- **Java**: `JavaProcessManager` uses TCP and prints `PORT=`. Works correctly.
-- **Python**: `PythonProcessManager` uses TCP, but the Python server tries UDS first. Mismatch.
-
----
-
-## Proposed Fixes (Priority Order)
-
-### Fix 1: Teach `PythonProcessManager` to Support UDS (Recommended)
-
-Update `waitForPort()` in `@sabeeirsharrma/python-runtime` to also recognize `SOCKET=` output and connect via Unix Domain Socket.
-
-**In `python-runtime/dist/index.js`:**
-
-```javascript
-// waitForPort — also detect SOCKET= for UDS
-waitForPort(proc) {
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            reject(new Error("Python process did not print PORT= or SOCKET= within timeout"));
-        }, this.options.connectTimeout);
-        let buffer = "";
-        proc.stdout.on("data", (chunk) => {
-            buffer += chunk.toString();
-            // Check for TCP
-            const portMatch = buffer.match(/PORT=(\d+)/);
-            if (portMatch) {
-                clearTimeout(timeout);
-                resolve({ type: "tcp", port: parseInt(portMatch[1], 10) });
-                return;
-            }
-            // Check for UDS
-            const sockMatch = buffer.match(/SOCKET=([^\s]+)/);
-            if (sockMatch) {
-                clearTimeout(timeout);
-                resolve({ type: "uds", path: sockMatch[1] });
-            }
-        });
-        // ...
-    });
-}
-```
-
-And update `connect()` to handle both:
-
-```javascript
-async connect() {
-    if (this.connectionInfo.type === "uds") {
-        // Connect via Unix Domain Socket
-        return new Promise((resolve, reject) => {
-            const socket = createConnection(this.connectionInfo.path, () => {
-                this.socket = socket;
-                socket.setNoDelay(true);
-                resolve();
-            });
-            socket.on("error", reject);
-        });
-    } else {
-        // Existing TCP connection logic
-    }
-}
-```
-
-**Pros:** Preserves the UDS performance benefit. No Python-side changes needed.
-**Cons:** Requires a change to `@sabeeirsharrma/python-runtime`.
-
----
-
-### Fix 2: Make Python Server Detect Its Execution Context
-
-Add an environment variable or CLI flag so the Python server knows whether it's being managed by the Node.js bridge:
+This code would break. It should be:
 
 ```python
-# In service.py start()
-use_tcp = os.environ.get("TRANSIT_FORCE_TCP", "") == "1" or "--tcp" in sys.argv
-if not use_tcp and hasattr(socket, "AF_UNIX") and sys.platform != "win32":
-    # ... UDS path
-else:
-    # ... TCP path
+def process_data(args_json):
+    args = json.loads(args_json)
+    # Transit wraps args as [{...}], extract the first object
+    if isinstance(args, list) and len(args) > 0:
+        args = args[0]
+    items = args.get("items", [])
 ```
 
-Then in `run-benchmark.js`:
+Or better: have the Transit server unwrap automatically before dispatching to user functions.
 
-```javascript
-const py = transit.python(resolve(__dirname, "./transit/python"), {
-    env: { TRANSIT_FORCE_TCP: "1" }
+---
+
+## Issue 5: Java `classpath` and `mainClass` Must Be Configured Manually
+
+**Severity:** Medium — confusing for new users
+**Component:** `transit-java-runtime` / `JavaProcessManager`
+
+### Symptom
+
+Calling `transit.java(dir)` without options fails with:
+
+```
+Java class not found: transit.java.TransitService (looked in ./java/src/main/java)
+```
+
+Users must know to pass:
+
+```js
+const jv = transit.java(resolve(__dirname, "./java/src/main/java"), {
+  classpath: resolve(__dirname, "./java/build"),
+  mainClass: "com.demo.App",
 });
 ```
 
-**Pros:** Simple, no library changes needed.
-**Cons:** Loses UDS performance. Requires callers to know about the flag.
+The default `mainClass` is `transit.java.TransitService`, which only exists if users compiled the Transit runtime sources. The `classpath` defaults to `<javaDir>/build`, which may not exist.
+
+### Recommendation
+
+Either:
+1. Auto-detect the main class by scanning for `public static void main` in compiled `.class` files
+2. Or default to scanning for any class with a `main` method in the classpath
+3. Or provide a better error message that lists available classes
 
 ---
 
-### Fix 3: Default Python Server to TCP
+## Issue 6: Java/Python Return JSON Strings, Not Objects
 
-Remove the UDS block from `TransitServer.start()` entirely, making TCP the only transport.
-
-**Pros:** Simplest fix. Guaranteed compatibility.
-**Cons:** Lose UDS performance (measurable for high-throughput IPC).
-
----
-
-### Fix 4: Add `SOCKET=` Protocol Support to the Transit Package
-
-Update the `transit.python()` factory to pass UDS support through:
-
-```javascript
-// In transit package's PythonLanguageHandle
-const py = transit.python("./transit/python", { transport: "uds" }); // or "tcp"
-```
-
-**Pros:** Explicit, configurable, backward-compatible.
-**Cons:** Requires API design decisions in the Transit package.
-
----
-
-## Resolution: UDS Support (Already Implemented)
-
-The `PythonProcessManager` in `@sabeeirsharrma/python-runtime` **already supports UDS**. The `waitForTransport()` method detects both `SOCKET=` and `PORT=` patterns, and `createConnection()` handles both UDS and TCP connections. No changes were needed for this fix.
-
----
-
-## Resolution: Thread Pool Deadlock (Fixed 2026-07-28)
-
-The thread pool deadlock was fixed by using a **separate executor** for `_handle_call` tasks. See "Issue: Thread Pool Deadlock in Python Service" below.
-
----
-
-## Resolution: Rust Compiler Warnings (Fixed 2026-07-28)
-
-Added `duration_ms` field to `TextAnalysisResult` and `GraphResult` structs in `benchmark/benchmark/computational/transit/rust/src/lib.rs`, making `analyze_text_full` and `process_graph` consistent with other benchmark functions that report timing.
-
----
-
-## Recommendation
-
-**Fix 1** is the correct long-term solution. UDS is genuinely faster for local IPC (benchmarks typically show 20-40% lower latency vs TCP loopback), and the Python server's preference for UDS is a good default. The Node.js bridge should adapt to what the server offers, not force TCP.
-
-As an immediate workaround to unblock the benchmark, **Fix 2** (environment variable) is the least invasive change that doesn't require modifying `node_modules`.
-
----
-
-## Additional Observations
-
-### Rust Compiler Warnings
-
-`src/lib.rs` has two unused `start` variables (lines 84 and 271) in `analyze_text_full` and `process_graph`. These functions don't report `duration_ms` in their results, unlike the other benchmarks. This is inconsistent — either all functions should report timing, or none should. Prefixing with `_start` would suppress the warnings.
-
-### `TransitServer.start` Detected as Exported Function
-
-The `.transit-cache.json` scanner picks up `TransitServer.start` as an exported function with signature `def start(self)`. This is a class method, not a standalone function — the scanner should exclude methods of classes that aren't the entry point. This doesn't cause bugs but clutters the function list.
-
-### Process Cleanup
-
-When the benchmark is interrupted (Ctrl+C), orphaned Python processes and stale UDS socket files (`/tmp/transit-*.sock`) are left behind. The `atexit` handler in `service.py` only fires on clean exit, not on SIGINT/SIGKILL. Consider adding SIGINT handling or a cleanup script.
-
----
-
-## Issue: Thread Pool Deadlock in Python Service
-
-**Severity:** Critical — Python benchmarks hang indefinitely
-**Date:** 2026-07-28
-**Component:** Python `TransitServer` (`_handle_client` + `_handle_call`)
-
----
+**Severity:** Medium — unexpected API behavior
+**Component:** Transit protocol layer
 
 ### Symptom
 
-After the UDS connection is established, the benchmark hangs during the first Python function call. No error messages appear, and no timeout is triggered. The output stops at:
+In JavaScript:
 
-```
-[transit-python] Connected to Python process on UDS /tmp/transit-XXXXX.sock
-```
-
----
-
-### Root Cause: Thread Pool Exhaustion Deadlock
-
-The `ThreadPoolExecutor` is shared between `_handle_client` (connection handler) and `_handle_call` (request processor). When the connection pool creates N connections, N `_handle_client` tasks are submitted to the executor. If the executor has M workers (where M < N), all M workers become blocked in `_recv_exact()` waiting for requests.
-
-When a request arrives and `_handle_client` submits `_handle_call` to the same executor, no workers are available to process it. `_handle_client` loops back to `_recv_exact()` and blocks again. `_handle_call` is queued indefinitely — **deadlock**.
-
-**Example:** On a 4-core machine (`max_workers=4`), `connectPool` creates 8 connections → 8 `_handle_client` tasks. 4 run immediately, 4 queued. When one submits `_handle_call`, all 4 workers are busy → `_handle_call` never runs.
-
----
-
-### Fix: Separate Executor for Call Handling
-
-Use a **separate `ThreadPoolExecutor`** for `_handle_call` tasks. This ensures call processing is never blocked by connection handling.
-
-**Files changed:**
-- `benchmark/benchmark/chat-server/transit/python/service.py`
-- `benchmark/benchmark/computational/transit/python/service.py`
-- `packages/transit-py-runtime/transit_server.py`
-
-**Diff pattern:**
-
-```python
-# BEFORE (deadlock-prone):
-self._executor = ThreadPoolExecutor(max_workers=...)
-
-# In _handle_client:
-self._executor.submit(self._handle_call, payload, request_id, client)
-
-# AFTER (separate executors, no deadlock):
-self._executor = ThreadPoolExecutor(max_workers=...)      # for _handle_client
-self._call_executor = ThreadPoolExecutor(max_workers=...) # for _handle_call
-
-# In _handle_client:
-self._call_executor.submit(self._handle_call, payload, request_id, client)
+```js
+const result = await jv.processRecord({ id: "test", value: 42 });
+console.log(typeof result); // "string"
+console.log(result);        // '{"id":"test","processed_value":46.75,...}'
 ```
 
-**Pros:** Eliminates deadlock entirely. Preserves request pipelining and concurrency. No performance regression.
-**Cons:** Uses more threads (2× executor workers). Acceptable for IPC servers.
+Users expect `result` to be a parsed object. Instead, they get a JSON string that must be manually parsed with `JSON.parse()`.
+
+This is inconsistent with how most JS APIs work and is not documented in the getting-started guide.
+
+### Recommendation
+
+Have the Transit JS bridge auto-parse JSON string results into objects. Or at minimum, document this clearly in the API reference with a helper function:
+
+```js
+function parseResult(raw) {
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+```
 
 ---
 
-## Issue: Data Contract Mismatches Across Backend Servers
+## Issue 7: `napi-build` Version Mismatch in Getting Started Guide
 
-**Severity:** High — produces incorrect benchmark results (phantom wins/losses)
-**Date:** 2026-07-28
-**Component:** Multiple Python server implementations (`zeromq/server.py`, `redis-pubsub/server.py`, `subprocess/server.py`, `unix-socket/server.py`, `grpc/server.py`, `thrift/server.py`)
-
----
+**Severity:** Low — causes build failure for new users
+**Component:** docs / getting-started.md
 
 ### Symptom
 
-Benchmark results show certain backends (especially ZeroMQ and Redis) performing suspiciously faster or slower than expected. Some backends appear to produce correct results but with wrong field names, causing silent data loss.
+The getting-started guide shows:
 
----
+```toml
+[dependencies]
+napi = { version = "3", features = ["serde-json"] }
+napi-derive = "3"
 
-### Root Cause: Field Name Mismatches
-
-Each Python server implemented its own computation functions with **different field names** than the benchmark payload. The benchmark runner sends payloads with specific field names (defined in `run-benchmark.js`), but the servers expected different names.
-
-#### Examples of Mismatches
-
-| Operation | Benchmark Payload Key | Server Expected Key | Result |
-|-----------|----------------------|---------------------|--------|
-| ETL Pipeline | `csv_data` | `rows` | Server received empty string, processed 0 rows |
-| Matrix Multiply | `a`, `b` (flat arrays) | `matrix_a`, `matrix_b` (2D arrays) | Server received empty arrays, returned zero matrix |
-| Matrix Determinant | `flat`, `n` | `matrix` (2D array) | Server received empty array, returned 0 |
-| Graph Processing | `edges_flat` (flat array) | `edges` (array of tuples) | Server received empty array, no edges processed |
-| Graph Processing | `iterations` | `iterations` (same) | OK |
-
-#### Why This Produced Wrong Results
-
-When a server receives an empty payload (due to wrong field names), it processes zero data and returns near-instant results. This made the backend appear extremely fast — a "phantom win" where the speed advantage comes from doing no work, not from efficient implementation.
-
-For example, ZeroMQ showed 0.15ms for ETL Pipeline while FastAPI showed 4.2ms. The 28x speedup was entirely due to ZeroMQ processing an empty string while FastAPI processed 1000 rows.
-
----
-
-### Fix: Shared Computation Module
-
-Created `computational/shared/computations.py` — a single source of truth for all computation functions with field names matching the benchmark payload format.
-
-**All servers now import from this module:**
-
-```python
-from shared.computations import OPERATIONS
-
-def handle_request(operation, payload):
-    fn = OPERATIONS.get(operation)
-    if fn:
-        return fn(payload)
-    return {"error": f"Unknown operation: {operation}"}
+[build-dependencies]
+napi-build = "3"
 ```
 
-**Files updated:**
-- `computational/zeromq/server.py` — rewritten to use shared module
-- `computational/redis-pubsub/server.py` — rewritten to use shared module
-- `computational/subprocess/server.py` — rewritten to use shared module
-- `computational/unix-socket/server.py` — rewritten to use shared module
-- `computational/grpc/server.py` — rewritten to use shared module
-- `computational/thrift/server.py` — rewritten to use shared module
+But `napi-build` v3 does not exist on crates.io. The latest is v2.4.0. Running `cargo build` fails:
+
+```
+error: failed to select a version for the requirement `napi-build = "^3"`
+```
+
+### Fix
+
+The Transit repo's own example (`examples/js-rust-java-demo/rust/Cargo.toml`) correctly uses:
+
+```toml
+[dependencies]
+napi = { version = "3", features = ["async"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"
+```
+
+### Recommendation
+
+Update `docs/getting-started.md` to use `napi-build = "2"`.
 
 ---
 
-### Preventive Measure: Output Correctness Validation
+## Issue 8: Scanner Detects TransitServer.start as Exported Function
 
-Added a validation phase to `run-benchmark.js` that runs each operation once per backend and compares results against a reference (FastAPI or Transit/Rust). Mismatches are flagged with warnings in the output.
+**Severity:** Low — cosmetic, clutters function list
+**Component:** `transit-scanner`
 
-**How it works:**
-1. Before timing benchmarks, each backend runs every operation once
-2. Results are normalized (strip timing fields, handle nesting differences)
-3. Deep comparison with floating-point tolerance catches field mismatches
-4. Volatile fields (readability_score, PageRank exact values) are skipped
-5. Summary shows PASS/WARN for each operation
+### Symptom
 
-This prevents future ghost wins by catching data contract regressions automatically.
+`transit.info()` shows:
+
+```
+python (./python): 7 functions
+  - register_function [tier 1]
+  - start_server [tier 1]
+  - TransitServer.start [tier 1]    ← class method, not user function
+  - TransitServer.stop [tier 1]     ← class method, not user function
+  - analyze_text [tier 1]
+  - transform_data [tier 1]
+  - format_report [tier 1]
+```
+
+`TransitServer.start` and `TransitServer.stop` are internal class methods from the Transit Python runtime, not user-defined functions. The scanner should exclude methods from classes that aren't the user's entry point.
+
+### Recommendation
+
+Filter out methods from classes imported from `transit_server` or other runtime modules.
+
+---
+
+## Summary of Recommended Priorities
+
+| # | Issue | Severity | Effort |
+|---|-------|----------|--------|
+| 1 | Java thread pool deadlock | Critical | Low (one-line change) |
+| 2 | Java runtime not in npm package | High | Medium |
+| 3 | Python transit_server.py not in npm package | High | Medium |
+| 4 | Transit wraps args in arrays | Medium | Low (document or auto-unwrap) |
+| 5 | Java classpath/mainClass manual config | Medium | Medium (auto-detect) |
+| 6 | JSON string results not auto-parsed | Medium | Low (bridge change) |
+| 7 | napi-build version in docs | Low | Trivial |
+| 8 | Scanner detects runtime class methods | Low | Low |

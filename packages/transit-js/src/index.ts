@@ -11,8 +11,8 @@
  * and dispatches through the appropriate transport bridge.
  */
 
-import { resolve, join, dirname } from "node:path";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
 import type { Manifest, ManifestEntry, TransitConfig, BuildOverride } from "@sabeeirsharrma/schema";
 import { loadConfigWithDefaults } from "@sabeeirsharrma/schema";
 
@@ -38,23 +38,23 @@ export class TransitError extends Error {
   readonly language: string;
   /** Which function was called */
   readonly functionName: string;
-  /** The original error message */
-  readonly cause: string;
+  /** The original error message (renamed from 'cause' to avoid shadowing Error.cause) */
+  readonly detail: string;
   /** The original error object (if available) */
   readonly raw: unknown;
 
   constructor(opts: {
     language: string;
     functionName: string;
-    cause: string;
+    detail: string;
     raw?: unknown;
   }) {
-    const msg = `[${opts.language}] ${opts.functionName}: ${opts.cause}`;
+    const msg = `[${opts.language}] ${opts.functionName}: ${opts.detail}`;
     super(msg);
     this.name = "TransitError";
     this.language = opts.language;
     this.functionName = opts.functionName;
-    this.cause = opts.cause;
+    this.detail = opts.detail;
     this.raw = opts.raw;
   }
 }
@@ -290,7 +290,7 @@ class RustDevBridge implements RuntimeBridge {
       throw new TransitError({
         language: "rust",
         functionName,
-        cause: `Function not found. Available: ${Object.keys(this.addon).join(", ")}`,
+        detail: `Function not found. Available: ${Object.keys(this.addon).join(", ")}`,
       });
     }
     try {
@@ -299,7 +299,7 @@ class RustDevBridge implements RuntimeBridge {
       throw new TransitError({
         language: "rust",
         functionName,
-        cause: (err as Error).message ?? String(err),
+        detail: (err as Error).message ?? String(err),
         raw: err,
       });
     }
@@ -375,13 +375,16 @@ class JavaDevBridge implements RuntimeBridge {
     if (!this.started) {
       await this.start();
     }
+    // Unwrap single-element args: proxy passes [obj] but Java expects {obj}
+    // (matches Python bridge behavior — consistent API across all languages)
+    const payload = args.length === 1 ? args[0] : args;
     try {
-      return await this.processManager.callFunction(functionName, JSON.stringify(args));
+      return await this.processManager.callFunction(functionName, JSON.stringify(payload));
     } catch (err) {
       throw new TransitError({
         language: "java",
         functionName,
-        cause: (err as Error).message ?? String(err),
+        detail: (err as Error).message ?? String(err),
         raw: err,
       });
     }
@@ -439,8 +442,46 @@ class JavaDevBridge implements RuntimeBridge {
   }
 
   private findMainClass(classpath: string): string {
-    const serviceFile = join(classpath, "transit/java/TransitService.class");
-    if (existsSync(serviceFile)) return "transit.java.TransitService";
+    // First, check if the default transit.java.TransitService exists
+    const transitServiceFile = join(classpath, "transit", "java", "TransitService.class");
+    if (existsSync(transitServiceFile)) return "transit.java.TransitService";
+
+    // Auto-detect: walk classpath looking for any class with public static void main
+    try {
+      const walkForMain = (dir: string, prefix: string): string | null => {
+        try {
+          const entries = readdirSync(dir);
+          for (const entry of entries) {
+            const fullPath = join(dir, entry);
+            const stat = statSync(fullPath);
+            if (stat.isDirectory()) {
+              const result = walkForMain(fullPath, prefix ? `${prefix}.${entry}` : entry);
+              if (result) return result;
+            } else if (entry.endsWith(".class") && !entry.startsWith("Transit")) {
+              // Convert file path to class name: com/example/App.class → com.example.App
+              const className = prefix
+                ? `${prefix}.${entry.replace(".class", "")}`
+                : entry.replace(".class", "");
+              // Check if this class has a main method by reading the .class file
+              try {
+                const bytes = readFileSync(fullPath);
+                // Look for the method name "main" in the constant pool (simplified check)
+                const content = bytes.toString("latin1");
+                if (content.includes("main") && content.includes("([Ljava/lang/String;)V")) {
+                  return className;
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+        return null;
+      };
+
+      const detected = walkForMain(classpath, "");
+      if (detected) return detected;
+    } catch {}
+
+    // Fallback
     return "transit.java.TransitService";
   }
 }
@@ -474,7 +515,7 @@ class PythonDevBridge implements RuntimeBridge {
       throw new TransitError({
         language: "python",
         functionName,
-        cause: (err as Error).message ?? String(err),
+        detail: (err as Error).message ?? String(err),
         raw: err,
       });
     }
@@ -516,8 +557,10 @@ class PythonDevBridge implements RuntimeBridge {
 
 class Transit {
   private handles = new Map<string, FunctionProxy>();
+  private bridges: RuntimeBridge[] = [];
   private _config: Required<TransitConfig>;
   private _configDir: string;
+  private shutdownRegistered = false;
 
   constructor(configDir?: string) {
     this._configDir = configDir ?? process.cwd();
@@ -526,6 +569,35 @@ class Transit {
     if (Object.keys(this._config.build).length > 0 || this._config.exports.length > 0) {
       console.error(`[transit] Config loaded from ${this._configDir}`);
     }
+  }
+
+  /**
+   * Register graceful shutdown handler.
+   * Called lazily on first bridge creation to avoid registering if no bridges are used.
+   */
+  private registerShutdown(): void {
+    if (this.shutdownRegistered) return;
+    this.shutdownRegistered = true;
+
+    const shutdown = async () => {
+      for (const bridge of this.bridges) {
+        try {
+          await bridge.stop?.();
+        } catch {}
+      }
+    };
+
+    process.on("exit", () => {
+      // Synchronous cleanup attempt — best effort
+    });
+    process.on("SIGINT", async () => {
+      await shutdown();
+      process.exit(0);
+    });
+    process.on("SIGTERM", async () => {
+      await shutdown();
+      process.exit(0);
+    });
   }
 
   /** The resolved config (always complete with defaults). */
@@ -553,6 +625,8 @@ class Transit {
 
     const buildOverride = this._config.build?.rust;
     const bridge = new RustDevBridge(dir, buildOverride);
+    this.bridges.push(bridge);
+    this.registerShutdown();
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("rust", manifest, bridge);
@@ -572,6 +646,8 @@ class Transit {
 
     const buildOverride = this._config.build?.java;
     const bridge = new JavaDevBridge(dir, buildOverride, this._config.maxRestarts, options);
+    this.bridges.push(bridge);
+    this.registerShutdown();
     // Scan Java source files for public methods
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
@@ -592,6 +668,8 @@ class Transit {
 
     const buildOverride = this._config.build?.python;
     const bridge = new PythonDevBridge(dir, this._config.maxRestarts, options?.serverScript, buildOverride);
+    this.bridges.push(bridge);
+    this.registerShutdown();
     const manifest = scanDirectorySync(dir);
     this.mergeConfigExports(manifest, dir);
     const handle = createLanguageHandle("python", manifest, bridge);

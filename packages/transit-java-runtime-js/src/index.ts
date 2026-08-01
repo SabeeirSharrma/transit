@@ -14,9 +14,8 @@
 
 import { spawn, ChildProcess } from "node:child_process";
 import { createConnection, Socket } from "node:net";
-import { randomBytes } from "node:crypto";
 import { resolve, join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, copyFileSync, readdirSync, statSync } from "node:fs";
 import { cpus } from "node:os";
 
 // ─── Protocol constants ───────────────────────────────────────────────────────
@@ -67,6 +66,7 @@ export class JavaProcessManager {
   private restartCount = 0;
   private ready = false;
   private readyPromise: Promise<void> | null = null;
+  private stopping = false;
   private nameCache = new Map<string, string>();
 
   constructor(options: JavaProcessOptions) {
@@ -87,19 +87,32 @@ export class JavaProcessManager {
     if (this.ready) return;
     if (this.readyPromise) return this.readyPromise;
 
-    this.readyPromise = this.doStart();
+    this.readyPromise = this.doStart().catch((err) => {
+      this.readyPromise = null;
+      throw err;
+    });
     return this.readyPromise;
   }
 
   private async doStart(): Promise<void> {
+    this.stopping = false;
     const { classpath, mainClass, jvmArgs } = this.options;
+
+    // Ensure Java runtime sources are available in the user's project
+    await this.ensureRuntimeSources();
 
     // Find the main class file
     const classFile = mainClass.replace(/\./g, "/") + ".class";
     if (!existsSync(join(classpath, classFile))) {
+      // List available classes to help the user
+      const available = this.findAvailableClasses(classpath);
+      const hint = available.length > 0
+        ? `\nAvailable classes: ${available.slice(0, 10).join(", ")}${available.length > 10 ? ` (and ${available.length - 10} more)` : ""}`
+        : "";
       throw new Error(
         `Java class not found: ${mainClass} (looked in ${classpath})\n` +
-        `Compile with: javac -d ${classpath} src/main/java/**/*.java`
+        `Compile with: javac -d ${classpath} src/main/java/**/*.java` +
+        hint
       );
     }
 
@@ -113,13 +126,17 @@ export class JavaProcessManager {
     this.process.on("error", (err) => {
       console.error(`[transit-java] Process error: ${err.message}`);
       this.ready = false;
-      this.maybeRestart();
+      if (!this.stopping) {
+        this.maybeRestart();
+      }
     });
 
     this.process.on("exit", (code, signal) => {
       console.error(`[transit-java] Process exited (code=${code}, signal=${signal})`);
       this.ready = false;
-      this.maybeRestart();
+      if (!this.stopping) {
+        this.maybeRestart();
+      }
     });
 
     // Read stdout for PORT=<port> line
@@ -275,7 +292,12 @@ export class JavaProcessManager {
       throw new Error(parsed.error || "Java function returned error");
     }
 
-    return result;
+    // Auto-parse JSON results to return native JS objects (consistent with Rust bridge)
+    try {
+      return JSON.parse(result);
+    } catch {
+      return result; // Not JSON — return raw string (e.g., plain text responses)
+    }
   }
 
   /**
@@ -361,6 +383,7 @@ export class JavaProcessManager {
    * Stop the Java process and clean up.
    */
   async stop(): Promise<void> {
+    this.stopping = true;
     this.ready = false;
 
     // Reject all pending calls
@@ -376,10 +399,11 @@ export class JavaProcessManager {
 
     // Kill process
     if (this.process) {
-      this.process.kill("SIGTERM");
+      const proc = this.process;
+      proc.kill("SIGTERM");
       // Force kill after 5 seconds
       setTimeout(() => {
-        this.process?.kill("SIGKILL");
+        try { proc.kill("SIGKILL"); } catch {}
       }, 5000);
       this.process = null;
     }
@@ -392,6 +416,101 @@ export class JavaProcessManager {
    */
   isReady(): boolean {
     return this.ready;
+  }
+
+  /**
+   * Find available .class files in the classpath directory.
+   * Used to provide helpful error messages when a class is not found.
+   */
+  private findAvailableClasses(classpath: string): string[] {
+    const classes: string[] = [];
+    const walk = (dir: string, prefix: string) => {
+      try {
+        const entries = readdirSync(dir);
+        for (const entry of entries) {
+          const fullPath = join(dir, entry);
+          const stat = statSync(fullPath);
+          if (stat.isDirectory()) {
+            walk(fullPath, prefix ? `${prefix}.${entry}` : entry);
+          } else if (entry.endsWith(".class")) {
+            const className = prefix
+              ? `${prefix}.${entry.replace(".class", "")}`
+              : entry.replace(".class", "");
+            classes.push(className);
+          }
+        }
+      } catch {}
+    };
+    walk(classpath, "");
+    return classes.sort();
+  }
+
+  /**
+   * Ensure Java runtime sources are available in the user's project.
+   * Copies TransitServer.java, TransitService.java, BinaryProtocol.java from
+   * the npm package if they don't already exist in the user's lib directory.
+   */
+  private async ensureRuntimeSources(): Promise<void> {
+    const targetDir = join(this.options.javaDir, "lib", "transit", "java");
+    const targetFiles = ["TransitServer.java", "TransitService.java", "BinaryProtocol.java"];
+
+    // Check if runtime sources already exist
+    const allExist = targetFiles.every(f => existsSync(join(targetDir, f)));
+    if (allExist) return;
+
+    // Find the npm package containing the Java runtime sources
+    const runtimePackage = this.findRuntimePackage();
+    if (!runtimePackage) {
+      // Runtime sources not found — user must provide them manually
+      // The error will surface when the class isn't found
+      return;
+    }
+
+    const sourceDir = join(runtimePackage, "src", "main", "java", "transit", "java");
+
+    // Copy each runtime file
+    mkdirSync(targetDir, { recursive: true });
+    for (const file of targetFiles) {
+      const source = join(sourceDir, file);
+      const target = join(targetDir, file);
+      if (!existsSync(target) && existsSync(source)) {
+        copyFileSync(source, target);
+        console.error(`[transit-java] Copied ${file} to ${target}`);
+      }
+    }
+  }
+
+  /**
+   * Find the transit-java-runtime-sources npm package.
+   * Searches node_modules in the user's project directory and parent directories.
+   */
+  private findRuntimePackage(): string | null {
+    const candidates = [
+      // Monorepo: workspace package
+      join(this.options.javaDir, "..", "..", "node_modules", "@sabeeirsharrma", "java-runtime-sources"),
+      // Standard: installed as dependency
+      join(this.options.javaDir, "node_modules", "@sabeeirsharrma", "java-runtime-sources"),
+      // Walk up from javaDir
+      ...this.walkUpForPackage(this.options.javaDir, "@sabeeirsharrma/java-runtime-sources"),
+    ];
+
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Walk up directory tree looking for a node_modules package.
+   */
+  private *walkUpForPackage(startDir: string, packageName: string): Generator<string> {
+    let dir = startDir;
+    for (let i = 0; i < 10; i++) {
+      yield join(dir, "node_modules", packageName);
+      const parent = resolve(dir, "..");
+      if (parent === dir) break;
+      dir = parent;
+    }
   }
 }
 

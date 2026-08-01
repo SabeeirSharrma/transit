@@ -1,5 +1,16 @@
 # @sabeeirsharrma/schema
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Added config validation tests and maxRestarts support
+
+### Patch Changes
+
+- Added `maxRestarts` to valid config keys in schema validation
+- Added comprehensive config validation test suite (28 tests)
+
 ## 2.4.0
 
 ### Minor Changes

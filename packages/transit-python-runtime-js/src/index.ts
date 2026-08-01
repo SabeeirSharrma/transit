@@ -15,7 +15,7 @@
 import { spawn, ChildProcess } from "node:child_process";
 import { createConnection, Socket } from "node:net";
 import { resolve, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, copyFileSync, mkdirSync } from "node:fs";
 import { cpus } from "node:os";
 
 // ─── Protocol constants ───────────────────────────────────────────────────────
@@ -90,13 +90,19 @@ export class PythonProcessManager {
     if (this.ready) return;
     if (this.readyPromise) return this.readyPromise;
 
-    this.readyPromise = this.doStart();
+    this.readyPromise = this.doStart().catch((err) => {
+      this.readyPromise = null;
+      throw err;
+    });
     return this.readyPromise;
   }
 
   private async doStart(): Promise<void> {
     this.stopping = false;
     const { interpreter, pythonDir } = this.options;
+
+    // Ensure transit_server.py is available in the user's Python directory
+    await this.ensureTransitServer();
 
     // Find the server script
     const scriptPath = this.findServerScript();
@@ -120,7 +126,9 @@ export class PythonProcessManager {
     this.process.on("error", (err) => {
       console.error(`[transit-python] Process error: ${err.message}`);
       this.ready = false;
-      this.maybeRestart();
+      if (!this.stopping) {
+        this.maybeRestart();
+      }
     });
 
     this.process.on("exit", (code, signal) => {
@@ -340,7 +348,12 @@ export class PythonProcessManager {
       throw new Error(parsed.error || "Python function returned error");
     }
 
-    return result;
+    // Auto-parse JSON results to return native JS objects (consistent with Rust bridge)
+    try {
+      return JSON.parse(result);
+    } catch {
+      return result; // Not JSON — return raw string (e.g., plain text responses)
+    }
   }
 
   /**
@@ -442,10 +455,11 @@ export class PythonProcessManager {
 
     // Kill process
     if (this.process) {
-      this.process.kill("SIGTERM");
+      const proc = this.process;
+      proc.kill("SIGTERM");
       // Force kill after 5 seconds
       setTimeout(() => {
-        this.process?.kill("SIGKILL");
+        try { proc.kill("SIGKILL"); } catch {}
       }, 5000);
       this.process = null;
     }
@@ -458,6 +472,55 @@ export class PythonProcessManager {
    */
   isReady(): boolean {
     return this.ready;
+  }
+
+  /**
+   * Ensure transit_server.py is available in the user's Python directory.
+   * Copies it from the npm package if it doesn't already exist.
+   */
+  private async ensureTransitServer(): Promise<void> {
+    const targetFile = join(this.options.pythonDir, "transit_server.py");
+    if (existsSync(targetFile)) return;
+
+    // Find the npm package containing transit_server.py
+    const runtimePackage = this.findRuntimePackage();
+    if (!runtimePackage) {
+      // Runtime not found — user must provide it manually
+      // The error will surface when the server script isn't found
+      return;
+    }
+
+    const sourceFile = join(runtimePackage, "transit_server.py");
+    if (existsSync(sourceFile)) {
+      mkdirSync(this.options.pythonDir, { recursive: true });
+      copyFileSync(sourceFile, targetFile);
+      console.error(`[transit-python] Copied transit_server.py to ${targetFile}`);
+    }
+  }
+
+  /**
+   * Find the transit-py-runtime npm package.
+   * Searches node_modules in the user's project directory and parent directories.
+   */
+  private findRuntimePackage(): string | null {
+    const candidates = this.walkUpForPackage(this.options.pythonDir, "@sabeeirsharrma/py-runtime");
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Walk up directory tree looking for a node_modules package.
+   */
+  private *walkUpForPackage(startDir: string, packageName: string): Generator<string> {
+    let dir = startDir;
+    for (let i = 0; i < 10; i++) {
+      yield join(dir, "node_modules", packageName);
+      const parent = resolve(dir, "..");
+      if (parent === dir) break;
+      dir = parent;
+    }
   }
 }
 

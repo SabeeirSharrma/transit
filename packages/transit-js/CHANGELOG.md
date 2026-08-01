@@ -1,5 +1,21 @@
 # transit
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Critical fixes across runtime bridges, servers, and scanner
+
+### Patch Changes
+
+- Fixed `require()` in ESM context in `findMainClass` — replaced with already-imported `readdirSync`, `statSync`, `readFileSync`
+- Improved `start()` retry: cleared `readyPromise` on failure so instances can retry
+- Updated dependencies
+  - @sabeeirsharrma/python-runtime@2.5.0
+  - @sabeeirsharrma/java-runtime@2.5.0
+  - @sabeeirsharrma/scanner@2.5.0
+  - @sabeeirsharrma/schema@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes

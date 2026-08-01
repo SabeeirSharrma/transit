@@ -1,0 +1,18 @@
+{
+  "name": "transit-showcase",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A showcase demo demonstrating Transit's cross-language calling capabilities",
+  "main": "index.js",
+  "scripts": {
+    "build:rust": "cd rust && cargo build --release && cp target/release/libtransit_showcase.so index.node",
+    "build:java": "mkdir -p java/build && javac -cp node_modules/@sabeeirsharrma/java-runtime/build -d java/build java/src/main/java/com/demo/*.java",
+    "build": "npm run build:rust && npm run build:java",
+    "start": "node index.js",
+    "demo": "npm run build && npm run start"
+  },
+  "dependencies": {
+    "@sabeeirsharrma/transit": "latest",
+    "transit-cli": "latest"
+  }
+}

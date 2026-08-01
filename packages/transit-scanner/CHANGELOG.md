@@ -1,5 +1,18 @@
 # @sabeeirsharrma/scanner
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Added transit:function marker support for Rust and Java
+
+### Patch Changes
+
+- Added `transit:function` marker support for Rust — functions with marker get tier 3
+- Added `transit:function` marker support for Java — methods with marker get tier 3
+- Added `transit:file` marker support for Rust and Java
+- Fixed `has_transit_function_marker` to scan backward past blank lines — previously failed if blank line separated comment from function
+
 ## 2.4.0
 
 ### Minor Changes

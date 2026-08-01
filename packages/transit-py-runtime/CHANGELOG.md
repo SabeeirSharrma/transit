@@ -1,5 +1,17 @@
 # @sabeeirsharrma/py-runtime
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Critical fixes for Python server protocol and thread safety
+
+### Patch Changes
+
+- Fixed health ping write lock — `_handle_health_ping` now acquires `write_lock` to prevent interleaved responses
+- Fixed `None` payload crash — added check for client disconnect mid-payload
+- Added early break on `None` payload to avoid confused reads on dead sockets
+
 ## 2.4.0
 
 ### Minor Changes

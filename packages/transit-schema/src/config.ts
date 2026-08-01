@@ -285,7 +285,7 @@ export function validateConfig(raw: Record<string, unknown>): TransitConfig {
   for (const key of Object.keys(raw)) {
     if (!knownKeys.has(key)) {
       throw new ConfigError(
-        `transit.config.json → unknown key "${key}". Valid keys: build, links, exports`
+        `transit.config.json → unknown key "${key}". Valid keys: build, links, exports, maxRestarts`
       );
     }
   }

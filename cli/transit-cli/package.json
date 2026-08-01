@@ -1,6 +1,6 @@
 {
   "name": "transit-cli",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Transit CLI — transit dev, transit build, transit start",
   "type": "module",
   "bin": {
@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sabeeirsharrma/transit": "^2.4.0",
-    "@sabeeirsharrma/schema": "^2.4.0",
-    "@sabeeirsharrma/scanner": "^2.4.0",
-    "@sabeeirsharrma/codegen": "^2.4.0"
+    "@sabeeirsharrma/transit": "^2.5.0",
+    "@sabeeirsharrma/schema": "^2.5.0",
+    "@sabeeirsharrma/scanner": "^2.5.0",
+    "@sabeeirsharrma/codegen": "^2.5.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

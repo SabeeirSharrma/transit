@@ -6,7 +6,7 @@
  * and provides a clean shutdown path.
  */
 
-import { resolve, join, relative } from "node:path";
+import { resolve, join } from "node:path";
 import { watch, readFileSync, readdirSync, statSync, type FSWatcher } from "node:fs";
 import { existsSync } from "node:fs";
 

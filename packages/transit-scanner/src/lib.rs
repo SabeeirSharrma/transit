@@ -166,15 +166,27 @@ fn has_transit_function_marker(source: &[u8], node: tree_sitter::Node) -> bool {
         return false;
     }
     let region = &source[..start_byte];
-    if let Some(last_nl) = region.iter().rposition(|&b| b == b'\n') {
-        let prev_line = &region[..last_nl];
-        if let Some(prev_prev_nl) = prev_line.iter().rposition(|&b| b == b'\n') {
-            let line = &region[prev_prev_nl + 1..last_nl];
+    
+    // Scan backward through lines, skipping blank lines, to find the comment
+    let mut pos = region.len();
+    while pos > 0 {
+        // Find the previous newline
+        if let Some(nl_pos) = region[..pos].iter().rposition(|&b| b == b'\n') {
+            let line = &region[nl_pos + 1..pos];
             let line_str = std::str::from_utf8(line).unwrap_or("");
-            return line_str.trim().contains("transit:function");
+            let trimmed = line_str.trim();
+            
+            // If line is blank, skip it and continue scanning
+            if trimmed.is_empty() {
+                pos = nl_pos;
+                continue;
+            }
+            
+            // Check if this line has the marker
+            return trimmed.contains("transit:function");
         } else {
-            let line = &region[..last_nl];
-            let line_str = std::str::from_utf8(line).unwrap_or("");
+            // No more newlines — check the remaining text
+            let line_str = std::str::from_utf8(&region[..pos]).unwrap_or("");
             return line_str.trim().contains("transit:function");
         }
     }
@@ -248,7 +260,7 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
     // For Rust, detect pub functions via source text
     if lang_name == "rust" {
         let source_str = std::str::from_utf8(source).unwrap_or("");
-        for line in source_str.lines() {
+        for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
             if trimmed.contains("pub fn ") || trimmed.contains("pub async fn ") {
                 // Extract function name
@@ -257,12 +269,57 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                     if let Some(paren_pos) = after_fn.find('(') {
                         let fn_name = after_fn[..paren_pos].trim();
                         let signature = trimmed.trim_end_matches('{').trim().to_string();
+                        
+                        // Check for transit:function marker in preceding lines
+                        // by finding the byte offset of this line
+                        let mut byte_offset = 0;
+                        for (i, l) in source_str.lines().enumerate() {
+                            if i == line_idx {
+                                break;
+                            }
+                            byte_offset += l.len() + 1; // +1 for newline
+                        }
+                        
+                        // Create a virtual node position for marker detection
+                        // We check the source around this line for the marker
+                        let has_marker = {
+                            let region = &source[..byte_offset];
+                            let mut check_pos = region.len();
+                            let mut found = false;
+                            while check_pos > 0 {
+                                if let Some(nl_pos) = region[..check_pos].iter().rposition(|&b| b == b'\n') {
+                                    let line = &region[nl_pos + 1..check_pos];
+                                    let line_str = std::str::from_utf8(line).unwrap_or("");
+                                    let trimmed_line = line_str.trim();
+                                    if trimmed_line.is_empty() {
+                                        check_pos = nl_pos;
+                                        continue;
+                                    }
+                                    found = trimmed_line.contains("transit:function");
+                                    break;
+                                } else {
+                                    let line_str = std::str::from_utf8(&region[..check_pos]).unwrap_or("");
+                                    found = line_str.trim().contains("transit:function");
+                                    break;
+                                }
+                            }
+                            found
+                        };
+                        
+                        let export_tier = if has_marker {
+                            3
+                        } else if file_has_transit_file_marker {
+                            2
+                        } else {
+                            1
+                        };
+                        
                         entries.push(ManifestEntry {
                             language: lang_name.to_string(),
                             source_file: path.to_string_lossy().to_string(),
                             function_name: fn_name.to_string(),
                             signature,
-                            export_tier: 1,
+                            export_tier,
                         });
                     }
                 }
@@ -273,8 +330,14 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
 
     // For Java, use text-based detection (more reliable than tree-sitter queries across versions)
     if lang_name == "java" {
+        // Skip transit runtime files — these are framework internals, not user functions
+        let path_str = path.to_string_lossy();
+        if path_str.contains("transit/java/") || path_str.contains("transit_java") {
+            return entries;
+        }
+
         let source_str = std::str::from_utf8(source).unwrap_or("");
-        for line in source_str.lines() {
+        for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
             // Match: public String methodName( ... ) or public void methodName( ... )
             // Also match: public static ... methodName( ... )
@@ -295,12 +358,53 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                             && !method_name.starts_with('@')
                         {
                             let signature = trimmed.trim_end_matches('{').trim().to_string();
+                            
+                            // Check for transit:function marker in preceding lines
+                            let has_marker = {
+                                let mut byte_offset = 0;
+                                for (i, l) in source_str.lines().enumerate() {
+                                    if i == line_idx {
+                                        break;
+                                    }
+                                    byte_offset += l.len() + 1;
+                                }
+                                let region = &source[..byte_offset];
+                                let mut check_pos = region.len();
+                                let mut found = false;
+                                while check_pos > 0 {
+                                    if let Some(nl_pos) = region[..check_pos].iter().rposition(|&b| b == b'\n') {
+                                        let line = &region[nl_pos + 1..check_pos];
+                                        let line_str = std::str::from_utf8(line).unwrap_or("");
+                                        let trimmed_line = line_str.trim();
+                                        if trimmed_line.is_empty() {
+                                            check_pos = nl_pos;
+                                            continue;
+                                        }
+                                        found = trimmed_line.contains("transit:function");
+                                        break;
+                                    } else {
+                                        let line_str = std::str::from_utf8(&region[..check_pos]).unwrap_or("");
+                                        found = line_str.trim().contains("transit:function");
+                                        break;
+                                    }
+                                }
+                                found
+                            };
+                            
+                            let export_tier = if has_marker {
+                                3
+                            } else if file_has_transit_file_marker {
+                                2
+                            } else {
+                                1
+                            };
+                            
                             entries.push(ManifestEntry {
                                 language: lang_name.to_string(),
                                 source_file: path.to_string_lossy().to_string(),
                                 function_name: method_name.to_string(),
                                 signature,
-                                export_tier: 1,
+                                export_tier,
                             });
                         }
                     }
@@ -312,6 +416,12 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
 
     // For Python, use tree-sitter with class method detection
     if lang_name == "python" {
+        // Skip transit runtime files — these are framework internals, not user functions
+        let path_str = path.to_string_lossy();
+        if path_str.contains("transit_server") || path_str.contains("transit_service") {
+            return entries;
+        }
+
         // First, detect top-level functions
         let query_str = python_function_query();
         if let Ok(query) = Query::new(&lang, query_str) {
@@ -389,6 +499,12 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                 }
 
                 if method_name.is_empty() || method_name.starts_with('_') {
+                    continue;
+                }
+
+                // Skip transit runtime class methods (TransitServer, etc.)
+                // These are framework internals, not user functions
+                if class_name == "TransitServer" || class_name == "BinaryProtocol" {
                     continue;
                 }
 
@@ -473,43 +589,6 @@ fn should_skip_dir(name: &str) -> bool {
         name,
         "node_modules" | "target" | "__pycache__" | ".git" | "dist" | "build" | ".next" | "vendor"
     )
-}
-
-fn walk_and_scan(root: &Path) -> Vec<ManifestEntry> {
-    let mut entries = Vec::new();
-    let walker = ignore::WalkBuilder::new(root)
-        .hidden(false)
-        .build();
-
-    for result in walker {
-        let entry = match result {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-            let dir_name = entry.file_name().to_string_lossy();
-            if should_skip_dir(&dir_name) {
-                continue;
-            }
-            continue;
-        }
-
-        let path = entry.path();
-        if path.extension().is_none() {
-            continue;
-        }
-
-        let source = match std::fs::read(path) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-
-        let mut file_entries = scan_file(path, &source);
-        entries.append(&mut file_entries);
-    }
-
-    entries
 }
 
 /// Scan a directory with caching. Only re-parses files whose mtime has changed.

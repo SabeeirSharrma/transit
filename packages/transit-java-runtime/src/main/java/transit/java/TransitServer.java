@@ -46,9 +46,10 @@ public class TransitServer {
     }
 
     private final Map<String, TransitFunction> functions = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newFixedThreadPool(
-        Math.min(Runtime.getRuntime().availableProcessors(), 8)
-    );
+    // Use a cached pool so handleClient threads don't starve handleCall threads.
+    // FixedThreadPool(min(cores,8)) + 8 Node connections = all threads blocked on
+    // readExact() → handleCall queues forever → deadlock.
+    private final ExecutorService executor = Executors.newCachedThreadPool();
     private ServerSocket serverSocket;
     private volatile boolean running = false;
     private int port = -1;
@@ -152,7 +153,7 @@ public class TransitServer {
                     case TYPE_CALL_REQUEST -> executor.submit(
                         () -> handleCall(payload, requestId, out, writeLock)
                     );
-                    case TYPE_HEALTH_PING -> handleHealthPing(requestId, out);
+                    case TYPE_HEALTH_PING -> handleHealthPing(requestId, out, writeLock);
                     default -> System.err.println("[transit-java] Unknown type: " + type);
                 }
             }
@@ -223,15 +224,20 @@ public class TransitServer {
         }
     }
 
-    private void handleHealthPing(int requestId, DataOutputStream out) throws IOException {
+    private void handleHealthPing(int requestId, DataOutputStream out, ReentrantLock writeLock) throws IOException {
         ByteBuffer resp = ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN);
         resp.put(PROTOCOL_VERSION);
         resp.put(TYPE_HEALTH_PONG);
         resp.putInt(requestId);
         resp.putInt(0); // empty payload
 
-        out.write(resp.array());
-        out.flush();
+        writeLock.lock();
+        try {
+            out.write(resp.array());
+            out.flush();
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────

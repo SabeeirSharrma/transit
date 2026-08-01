@@ -233,6 +233,10 @@ class TransitServer:
             if self._socket_path is None:
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
+            # Per-client write lock to prevent interleaved responses
+            # (matches Java server's ReentrantLock pattern)
+            write_lock = threading.Lock()
+
             with client:
                 while self._running:
                     # Read header
@@ -250,25 +254,27 @@ class TransitServer:
 
                     # Read payload
                     payload = self._recv_exact(client, payload_len) if payload_len > 0 else b""
+                    if payload is None:
+                        break
 
                     # Dispatch to separate call executor (avoids deadlock)
                     if msg_type == TYPE_CALL_REQUEST:
                         self._call_executor.submit(
-                            self._handle_call, payload, request_id, client
+                            self._handle_call, payload, request_id, client, write_lock
                         )
                     elif msg_type == TYPE_HEALTH_PING:
-                        self._handle_health_ping(request_id, client)
+                        self._handle_health_ping(request_id, client, write_lock)
                     else:
                         print(f"[transit-py] Unknown type: {msg_type}", file=sys.stderr)
         except Exception as e:
             if self._running:
                 print(f"[transit-py] Client error: {e}", file=sys.stderr)
 
-    def _handle_call(self, payload, request_id, client):
+    def _handle_call(self, payload, request_id, client, write_lock):
         """Handle a CALL_REQUEST message.
 
-        Processes the request and writes the response directly to the client socket.
-        Called inline from _handle_client to avoid thread pool deadlock.
+        Processes the request and writes the response to the client socket
+        under a per-client lock to prevent interleaved responses.
         """
         try:
             buf = memoryview(payload)
@@ -313,14 +319,17 @@ class TransitServer:
             struct.pack_into("<BI", resp, HEADER_SIZE, status, result_len)
             resp[HEADER_SIZE + 5 :] = result_bytes
 
-            client.sendall(resp)
+            # Acquire lock only for the write to prevent interleaved responses
+            with write_lock:
+                client.sendall(resp)
         except Exception as e:
             print(f"[transit-py] Call handler error: {e}", file=sys.stderr)
 
-    def _handle_health_ping(self, request_id, client):
+    def _handle_health_ping(self, request_id, client, write_lock):
         """Handle a HEALTH_PING message."""
         resp = struct.pack(HEADER_FORMAT, PROTOCOL_VERSION, TYPE_HEALTH_PONG, request_id, 0)
-        client.sendall(resp)
+        with write_lock:
+            client.sendall(resp)
 
     def _recv_exact(self, sock, n):
         """Receive exactly n bytes from a socket.

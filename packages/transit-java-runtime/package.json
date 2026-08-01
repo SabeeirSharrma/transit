@@ -1,0 +1,13 @@
+{
+  "name": "@sabeeirsharrma/java-runtime-sources",
+  "version": "2.5.0",
+  "description": "Java source files for Transit polyglot interop runtime",
+  "main": "src/main/java/transit/java/TransitServer.java",
+  "files": [
+    "src/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

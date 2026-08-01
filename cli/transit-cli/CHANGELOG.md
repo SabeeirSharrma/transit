@@ -1,5 +1,21 @@
 # transit-cli
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Added runtime file copying to `transit init`
+
+### Patch Changes
+
+- `transit init` now copies runtime files to detected language directories (Java .java files, Python transit_server.py)
+- Added workspace package detection for monorepo support
+- Updated dependencies
+  - @sabeeirsharrma/scanner@2.5.0
+  - @sabeeirsharrma/schema@2.5.0
+  - @sabeeirsharrma/transit@2.5.0
+  - @sabeeirsharrma/codegen@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes

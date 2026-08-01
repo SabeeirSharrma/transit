@@ -1,5 +1,24 @@
 # @sabeeirsharrma/java-runtime
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Critical fixes for Java runtime bridge and server
+
+### Patch Changes
+
+- Fixed SIGKILL never firing — saved process reference before nulling in `stop()`
+- Fixed `start()` permanently bricking instance on failure — cleared `readyPromise` on error
+- Added `stopping` flag to prevent spurious restarts after `stop()`
+- Fixed `error` and `exit` handlers to check `stopping` flag before calling `maybeRestart()`
+- Fixed `require()` in `findAvailableClasses` — replaced with imported `readdirSync`, `statSync`, `join`
+- Added `readdirSync` and `statSync` to imports
+- Added `@sabeeirsharrma/java-runtime-sources` dependency for auto-copy
+- Updated dependencies
+  - @sabeeirsharrma/java-runtime-sources@2.5.0
+  - @sabeeirsharrma/schema@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes

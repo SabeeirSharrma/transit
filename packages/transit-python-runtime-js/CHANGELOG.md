@@ -1,5 +1,20 @@
 # @sabeeirsharrma/python-runtime
 
+## 2.5.0
+
+### Minor Changes
+
+- Patch 2.5.0: Critical fixes for Python runtime bridge
+
+### Patch Changes
+
+- Fixed SIGKILL never firing — saved process reference before nulling in `stop()`
+- Fixed `start()` permanently bricking instance on failure — cleared `readyPromise` on error
+- Added `stopping` check in `error` handler to prevent spurious restarts after `stop()`
+- Added `@sabeeirsharrma/py-runtime` dependency for auto-copy
+- Updated dependencies
+  - @sabeeirsharrma/py-runtime@2.5.0
+
 ## 2.4.0
 
 ### Minor Changes

@@ -79,7 +79,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [build-dependencies]
-napi-build = "3"
+napi-build = "2"
 ```
 
 Create `rust/build.rs` (required by napi-rs):
@@ -184,14 +184,14 @@ Python is great for data processing and simple scripts. Let us add some Python f
 
 ### Copy the Transit server into your project
 
-Transit needs a small Python server to handle communication with JavaScript. Copy it from the Transit package into your Python directory:
+Transit automatically copies `transit_server.py` from the Transit package into your Python directory on first use. You can also copy it manually if needed:
 
 ```bash
 mkdir -p python
-cp node_modules/transit/packages/transit-py-runtime/transit_server.py python/
+cp node_modules/@sabeeirsharrma/py-runtime/transit_server.py python/
 ```
 
-> **Why?** The `transit_server.py` file is the bridge between Python and JavaScript. It must be co-located with your Python files because Python imports it directly. Do not try to import from `node_modules` — the path will not work in most setups.
+> **Note:** Transit handles this automatically — the manual copy step is optional.
 
 ### Create the Python file
 
@@ -315,19 +315,16 @@ public class App {
 
 ### Build the Java code
 
-You need to compile the Java code. This requires the Java Development Kit (JDK):
+You need to compile the Java code. This requires the Java Development Kit (JDK). Transit automatically copies the Java runtime sources (`TransitServer.java`, `TransitService.java`, `BinaryProtocol.java`) from the npm package into your project on first use:
 
 ```bash
-# Build the Transit Java runtime (the server code)
-mkdir -p packages/transit-java-runtime/build
-javac -d packages/transit-java-runtime/build \
-  node_modules/transit/packages/transit-java-runtime/src/main/java/transit/java/*.java
+mkdir -p java/build
+
+# Build the Transit Java runtime (auto-copied by Transit, or copy manually)
+javac -d java/build java/lib/transit/java/*.java
 
 # Build your app
-mkdir -p java/build
-javac -cp packages/transit-java-runtime/build \
-  -d java/build \
-  java/src/main/java/com/example/*.java
+javac -cp java/build -d java/build java/src/main/java/com/example/*.java
 ```
 
 ### Call from JavaScript
@@ -463,10 +460,10 @@ Make sure your Python file is named one of: `transit_service.py`, `service.py`, 
 const py = transit.python("./python", { serverScript: "my_file.py" });
 ```
 
-Also make sure `transit_server.py` is in the same directory. Copy it from the Transit package:
+Also make sure `transit_server.py` is in the same directory. Transit auto-copies it from the Transit package, but you can also copy it manually:
 
 ```bash
-cp node_modules/transit/packages/transit-py-runtime/transit_server.py python/
+cp node_modules/@sabeeirsharrma/py-runtime/transit_server.py python/
 ```
 
 **"Java class not found"**

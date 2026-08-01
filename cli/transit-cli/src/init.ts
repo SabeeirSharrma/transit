@@ -9,7 +9,7 @@
  */
 
 import { resolve, join, relative, dirname } from "node:path";
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, copyFileSync, mkdirSync } from "node:fs";
 import type { TransitConfig } from "@sabeeirsharrma/schema";
 
 // ─── Language detection ──────────────────────────────────────────────────────
@@ -169,6 +169,147 @@ function checkPackageInstalled(lang: string, projectDir: string): string | null 
   }
 }
 
+// ─── Runtime file copying ─────────────────────────────────────────────────────
+
+/**
+ * Walk up directory tree looking for a node_modules package.
+ */
+function* walkUpForPackage(startDir: string, packageName: string): Generator<string> {
+  let dir = startDir;
+  for (let i = 0; i < 10; i++) {
+    yield join(dir, "node_modules", packageName);
+    const parent = resolve(dir, "..");
+    if (parent === dir) break;
+    dir = parent;
+  }
+}
+
+/**
+ * Find a runtime package in node_modules.
+ */
+function findRuntimePackage(projectDir: string, packageName: string): string | null {
+  // Check standard node_modules locations
+  for (const candidate of walkUpForPackage(projectDir, packageName)) {
+    if (existsSync(candidate)) return candidate;
+  }
+  
+  // Check monorepo workspace packages (packages/<name>)
+  const pkgName = packageName.split("/").pop() ?? packageName;
+  const workspaceCandidates = [
+    join(projectDir, "packages", pkgName),
+    join(projectDir, "..", "packages", pkgName),
+    join(projectDir, "..", "..", "packages", pkgName),
+  ];
+  
+  for (const candidate of workspaceCandidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  
+  return null;
+}
+
+/**
+ * Copy Java runtime files (TransitServer.java, TransitService.java, BinaryProtocol.java)
+ * to the detected Java directory.
+ */
+function copyJavaRuntimeFiles(javaDir: string, projectDir: string): string[] {
+  const warnings: string[] = [];
+  const targetDir = join(javaDir, "lib", "transit", "java");
+  const targetFiles = ["TransitServer.java", "TransitService.java", "BinaryProtocol.java"];
+
+  // Check if all files already exist
+  const allExist = targetFiles.every((f) => existsSync(join(targetDir, f)));
+  if (allExist) {
+    console.log(`[transit] Java runtime files already present in ${targetDir}`);
+    return warnings;
+  }
+
+  // Find the npm package containing the Java runtime sources
+  const runtimePackage = findRuntimePackage(projectDir, "@sabeeirsharrma/java-runtime-sources");
+  if (!runtimePackage) {
+    warnings.push("Java: @sabeeirsharrma/java-runtime-sources not found in node_modules");
+    return warnings;
+  }
+
+  // Try both possible source directory structures
+  const sourceDirCandidates = [
+    join(runtimePackage, "src", "main", "java", "transit", "java"), // npm package structure
+    join(runtimePackage, "src", "main", "java", "transit", "java"), // workspace package structure
+  ];
+  
+  let sourceDir = "";
+  for (const candidate of sourceDirCandidates) {
+    if (existsSync(candidate)) {
+      sourceDir = candidate;
+      break;
+    }
+  }
+  
+  if (!sourceDir) {
+    warnings.push(`Java: TransitServer.java not found in ${runtimePackage}`);
+    return warnings;
+  }
+
+  // Copy each runtime file
+  mkdirSync(targetDir, { recursive: true });
+  for (const file of targetFiles) {
+    const source = join(sourceDir, file);
+    const target = join(targetDir, file);
+    if (!existsSync(target) && existsSync(source)) {
+      copyFileSync(source, target);
+      console.log(`[transit] Copied ${file} to ${target}`);
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Copy Python runtime file (transit_server.py) to the detected Python directory.
+ */
+function copyPythonRuntimeFiles(pythonDir: string, projectDir: string): string[] {
+  const warnings: string[] = [];
+  const targetFile = join(pythonDir, "transit_server.py");
+
+  // Check if file already exists
+  if (existsSync(targetFile)) {
+    console.log(`[transit] Python runtime file already present in ${targetFile}`);
+    return warnings;
+  }
+
+  // Find the npm package containing the Python runtime
+  const runtimePackage = findRuntimePackage(projectDir, "@sabeeirsharrma/py-runtime");
+  if (!runtimePackage) {
+    warnings.push("Python: @sabeeirsharrma/py-runtime not found in node_modules");
+    return warnings;
+  }
+
+  const sourceFile = join(runtimePackage, "transit_server.py");
+  if (existsSync(sourceFile)) {
+    mkdirSync(pythonDir, { recursive: true });
+    copyFileSync(sourceFile, targetFile);
+    console.log(`[transit] Copied transit_server.py to ${targetFile}`);
+  } else {
+    warnings.push(`Python: transit_server.py not found in ${runtimePackage}`);
+  }
+
+  return warnings;
+}
+
+/**
+ * Copy runtime files for a detected language to its directory.
+ */
+function copyRuntimeFiles(lang: DetectedLanguage, projectDir: string): string[] {
+  switch (lang.lang) {
+    case "java":
+      return copyJavaRuntimeFiles(lang.absDir, projectDir);
+    case "python":
+      return copyPythonRuntimeFiles(lang.absDir, projectDir);
+    default:
+      return [];
+  }
+}
+
 // ─── Config generation ──────────────────────────────────────────────────────
 
 /**
@@ -299,7 +440,16 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
   }
 
-  // 5. Check if config already exists
+  // 5. Copy runtime files to detected directories
+  if (!options.dryRun) {
+    console.log("[transit] Copying runtime files...");
+    for (const lang of languages) {
+      const copyWarnings = copyRuntimeFiles(lang, projectDir);
+      warnings.push(...copyWarnings);
+    }
+  }
+
+  // 6. Check if config already exists
   const configPath = join(projectDir, "transit.config.json");
   const configExisted = existsSync(configPath);
 
@@ -307,7 +457,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     console.log("[transit] transit.config.json already exists — updating...");
   }
 
-  // 6. Generate and write config
+  // 7. Generate and write config
   const config = generateConfig(languages);
 
   if (options.dryRun) {

@@ -1,0 +1,28 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "transit-showcase",
+      "dependencies": {
+        "@sabeeirsharrma/transit": "latest",
+        "transit-cli": "^2.4.0",
+      },
+    },
+  },
+  "packages": {
+    "@sabeeirsharrma/codegen": ["@sabeeirsharrma/codegen@2.4.0", "", { "dependencies": { "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-Xag2lCHKEloI9CBPsfEmtkdDoRpiduZLof5yX1CiJg6e726yqM7ihzMDnip/s+IC5NzFEkYgfbf3qkvl643a3g=="],
+
+    "@sabeeirsharrma/java-runtime": ["@sabeeirsharrma/java-runtime@2.4.0", "", { "dependencies": { "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-9HLEkEuuDOJTmV4zaWHH6aCGqQJdlBWSe9d5J2fwzwrSM/SeOMD6Jo7wxRSM5zHYdVq5X75u+oVnNNTe79cEwA=="],
+
+    "@sabeeirsharrma/python-runtime": ["@sabeeirsharrma/python-runtime@2.4.0", "", {}, "sha512-45qTOtOwNW78qccBwsoq21G67nK3yf3VKXDwpJzb8XPYjH2Rs/ty9rAJJg+EnyBSOzQQSWu2nozLtxjRaZQdjw=="],
+
+    "@sabeeirsharrma/scanner": ["@sabeeirsharrma/scanner@2.4.0", "", {}, "sha512-+syH/nk1iMB378i+dWOL7KkDMbqAQeVfe7DGwM9X0cPuXIlEhlfVm/cWeCD7atAxuccnHbLJy9tktiq0+En7KQ=="],
+
+    "@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@2.4.0", "", {}, "sha512-p394N46dAatsUTKeqA1ACC/utfxa+aNWrRqiAcRs2z481DvnZr4j8zTvjLTP/j4u2D9cFV/c5I/Ohrm+7IA1Pg=="],
+
+    "@sabeeirsharrma/transit": ["@sabeeirsharrma/transit@2.4.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime": "^2.4.0", "@sabeeirsharrma/python-runtime": "^2.4.0", "@sabeeirsharrma/scanner": "^2.4.0", "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-AsilqXXCv+Ip8M2xN32KSRO3lvWjXaifp2Q5Pjw2NvM3tDsEZxi84z1hNR9A2imYdJgbnUAkpxnBwnxCrdZCMg=="],
+
+    "transit-cli": ["transit-cli@2.4.0", "", { "dependencies": { "@sabeeirsharrma/codegen": "^2.4.0", "@sabeeirsharrma/scanner": "^2.4.0", "@sabeeirsharrma/schema": "^2.4.0", "@sabeeirsharrma/transit": "^2.4.0" }, "bin": { "transit": "dist/index.js" } }, "sha512-Qw9cXPif4GJp3lXHxyyH8ROs8oE4YIkR4mFz22y2LKckWZ43iuB3ALI7H/Va/I9Pu360GXG3cARXyRXPI0/XXw=="],
+  }
+}
