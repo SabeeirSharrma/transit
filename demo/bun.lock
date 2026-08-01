@@ -6,14 +6,18 @@
       "name": "transit-showcase",
       "dependencies": {
         "@sabeeirsharrma/transit": "latest",
-        "transit-cli": "^2.4.0",
+        "transit-cli": "latest",
       },
     },
   },
   "packages": {
-    "@sabeeirsharrma/codegen": ["@sabeeirsharrma/codegen@2.4.0", "", { "dependencies": { "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-Xag2lCHKEloI9CBPsfEmtkdDoRpiduZLof5yX1CiJg6e726yqM7ihzMDnip/s+IC5NzFEkYgfbf3qkvl643a3g=="],
+    "@sabeeirsharrma/codegen": ["@sabeeirsharrma/codegen@2.5.0", "", { "dependencies": { "@sabeeirsharrma/schema": "^2.5.0" } }, "sha512-y80owrhPl214f07uBOLvSTe30sQsnhelKcIgpldtVRTrf+mYDnuKUpSTfSq9gBZ+BaaRw/QLVkNfRFal2v7pPg=="],
 
     "@sabeeirsharrma/java-runtime": ["@sabeeirsharrma/java-runtime@2.4.0", "", { "dependencies": { "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-9HLEkEuuDOJTmV4zaWHH6aCGqQJdlBWSe9d5J2fwzwrSM/SeOMD6Jo7wxRSM5zHYdVq5X75u+oVnNNTe79cEwA=="],
+
+    "@sabeeirsharrma/java-runtime-sources": ["@sabeeirsharrma/java-runtime-sources@2.5.0", "", {}, "sha512-2V/NcOrs5IDOCQvWaoKRUkNW/haY1ADmTkG8GJ/H75yFyjO4b+vbVFuaILSSG7D6FlHhcwFKuKCTlOqvNKl1pQ=="],
+
+    "@sabeeirsharrma/py-runtime": ["@sabeeirsharrma/py-runtime@2.6.0", "", {}, "sha512-mro0EQT2p2cHcePp9dF5dc5DTNpfmTOpxRq97uUMFu6H9/qt1ZFKUcE9bTN8enSLk5zbnZJGIUoqLxpYp8UAiQ=="],
 
     "@sabeeirsharrma/python-runtime": ["@sabeeirsharrma/python-runtime@2.4.0", "", {}, "sha512-45qTOtOwNW78qccBwsoq21G67nK3yf3VKXDwpJzb8XPYjH2Rs/ty9rAJJg+EnyBSOzQQSWu2nozLtxjRaZQdjw=="],
 
@@ -23,6 +27,18 @@
 
     "@sabeeirsharrma/transit": ["@sabeeirsharrma/transit@2.4.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime": "^2.4.0", "@sabeeirsharrma/python-runtime": "^2.4.0", "@sabeeirsharrma/scanner": "^2.4.0", "@sabeeirsharrma/schema": "^2.4.0" } }, "sha512-AsilqXXCv+Ip8M2xN32KSRO3lvWjXaifp2Q5Pjw2NvM3tDsEZxi84z1hNR9A2imYdJgbnUAkpxnBwnxCrdZCMg=="],
 
-    "transit-cli": ["transit-cli@2.4.0", "", { "dependencies": { "@sabeeirsharrma/codegen": "^2.4.0", "@sabeeirsharrma/scanner": "^2.4.0", "@sabeeirsharrma/schema": "^2.4.0", "@sabeeirsharrma/transit": "^2.4.0" }, "bin": { "transit": "dist/index.js" } }, "sha512-Qw9cXPif4GJp3lXHxyyH8ROs8oE4YIkR4mFz22y2LKckWZ43iuB3ALI7H/Va/I9Pu360GXG3cARXyRXPI0/XXw=="],
+    "transit-cli": ["transit-cli@2.5.0", "", { "dependencies": { "@sabeeirsharrma/codegen": "^2.5.0", "@sabeeirsharrma/scanner": "^2.5.0", "@sabeeirsharrma/schema": "^2.5.0", "@sabeeirsharrma/transit": "^2.5.0" }, "bin": { "transit": "dist/index.js" } }, "sha512-NNUfLhHDh235x7cQG+ZxRTeyxYJ7SH+LiFCxHpsgsrB0njL5UecI9ey40sprUd76fjYuE9Us2/+jXyAtZGnPAQ=="],
+
+    "@sabeeirsharrma/codegen/@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@2.5.0", "", {}, "sha512-Gr87OIhRSpmBb+zExGmrKal5tZUuyfXO9mtkymCLrZ1F+xMgwZ+vz+RCUxAkdRjwL32f+V5cfhB36ApeDvgniA=="],
+
+    "transit-cli/@sabeeirsharrma/scanner": ["@sabeeirsharrma/scanner@2.5.0", "", {}, "sha512-M/m6PmDVaXw7Uf2Ia5beb0BI8lNe7NKLpJlT2cWBqang1H7inl/OQpqI19zIzcU0kGCQb3sUwI8Okx4Q1q5dLw=="],
+
+    "transit-cli/@sabeeirsharrma/schema": ["@sabeeirsharrma/schema@2.5.0", "", {}, "sha512-Gr87OIhRSpmBb+zExGmrKal5tZUuyfXO9mtkymCLrZ1F+xMgwZ+vz+RCUxAkdRjwL32f+V5cfhB36ApeDvgniA=="],
+
+    "transit-cli/@sabeeirsharrma/transit": ["@sabeeirsharrma/transit@2.6.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime": "^2.6.0", "@sabeeirsharrma/python-runtime": "^2.6.0", "@sabeeirsharrma/scanner": "^2.5.0", "@sabeeirsharrma/schema": "^2.5.0" } }, "sha512-Bdcmv5pxEuQHbJkbDp8rmLrmDbGrhBCXdyz2jycNxbqyyhrKE/1ghQx5tY4bsEmkf3sJIGWgi7L5wkrE95flSA=="],
+
+    "transit-cli/@sabeeirsharrma/transit/@sabeeirsharrma/java-runtime": ["@sabeeirsharrma/java-runtime@2.6.0", "", { "dependencies": { "@sabeeirsharrma/java-runtime-sources": "^2.5.0", "@sabeeirsharrma/schema": "^2.5.0" } }, "sha512-4OPRmJIXybsSmQYX+0g6JrACIQ6aHoFGnbrV8nIOadW8zHp95aHfVoC/37vsE8RCwAeyf0EZpvyAJp7b0hAl6g=="],
+
+    "transit-cli/@sabeeirsharrma/transit/@sabeeirsharrma/python-runtime": ["@sabeeirsharrma/python-runtime@2.6.0", "", { "dependencies": { "@sabeeirsharrma/py-runtime": "^2.6.0" } }, "sha512-WphygOHq/Wcxa3GsgVWA55s/toy6d64N+BcYYx0Wjnx6TkD4JDHqV3Idkjm1YK5h6FtejS7awjMh49C3YXcx1A=="],
   }
 }
