@@ -46,7 +46,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 
 ### Compute Benchmarks
 
-## Serial (single request, 100 iterations)
+#### Serial (single request, 100 iterations)
 
 | Operation | FastAPI (ms) | FastAPI (ops/s) | Transit/Rust (ms) | Transit/Rust (ops/s) | Transit/Python (ms) | Transit/Python (ops/s) | Transit/Java (ms) | Transit/Java (ops/s) | gRPC (ms) | gRPC (ops/s) | Thrift (ms) | Thrift (ops/s) | Unix Socket (ms) | Unix Socket (ops/s) | Subprocess (ms) | Subprocess (ops/s) | ZeroMQ (ms) | ZeroMQ (ops/s) | Redis (ms) | Redis (ops/s) | PyO3 (ms) | PyO3 (ops/s) | Winner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -58,7 +58,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 | Fibonacci Memo (n=38) | 1.14 | 877.3 | 0.04 | 28030.8 | 0.19 | 5278.0 | 0.01 | 67279.5 | 1.63 | 612.9 | 0.32 | 3092.3 | 0.26 | 3916.9 | 0.08 | 12140.9 | 0.19 | 5310.8 | N/A | N/A | 0.03 | 29726.5 | **Transit/Java** (76.7x faster) |
 | SHA-256 Hashing (10K rounds) | 5.00 | 200.0 | 0.02 | 52708.6 | 4.28 | 233.5 | 0.01 | 76779.6 | 5.66 | 176.7 | 11.69 | 85.6 | 10.65 | 93.9 | 4.34 | 230.7 | 4.50 | 222.0 | N/A | N/A | 0.97 | 1030.2 | **Transit/Java** (383.8x faster) |
 
-## Concurrent (undefined parallel requests)
+#### Concurrent (undefined parallel requests)
 
 | Operation | FastAPI (ms) | FastAPI (ops/s) | Transit/Rust (ms) | Transit/Rust (ops/s) | Transit/Python (ms) | Transit/Python (ops/s) | Transit/Java (ms) | Transit/Java (ops/s) | gRPC (ms) | gRPC (ops/s) | Thrift (ms) | Thrift (ops/s) | Unix Socket (ms) | Unix Socket (ops/s) | Subprocess (ms) | Subprocess (ops/s) | ZeroMQ (ms) | ZeroMQ (ops/s) | Redis (ms) | Redis (ops/s) | PyO3 (ms) | PyO3 (ops/s) | Winner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -74,7 +74,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 
 > Generated: 2026-08-01T08:19:02.997Z | Mode: Serial & Concurrent | Iterations: 100 | Warmup: 10
 
-## Serial (single request, 100 iterations)
+#### Serial (single request, 100 iterations)
 
 | Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
 | ----------- | --------- | -------------- | ---------------- | -------------- | ------ | -------- | ----------- | ------------ | -------- | ------- | -------- |
@@ -91,7 +91,7 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 | User Lookup | 0.77ms | 0.01ms | 0.14ms | 0.01ms | 0.19ms | 0.08ms | 0.24ms | 0.04ms | 0.11ms | N/Ams | **Transit/Rust** (139.1x faster) |
 | Channel History (50 messages) | 1.44ms | 0.00ms | 0.14ms | 0.01ms | 0.23ms | 0.11ms | 0.17ms | 0.05ms | 0.09ms | N/Ams | **Transit/Rust** (943.2x faster) |
 
-## Concurrent (10 parallel requests)
+#### Concurrent (10 parallel requests)
 
 | Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
 | ----------- | --------- | -------------- | ---------------- | -------------- | ------ | -------- | ----------- | ------------ | -------- | ------- | -------- |
