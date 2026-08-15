@@ -31,6 +31,8 @@ export default defineConfig({
 					label: 'Start Here',
 					items: [
 						{ label: 'Introduction', slug: 'guides/getting-started' },
+						{ label: 'JavaScript Snippets', slug: 'guides/javascript-snippets' },
+						{ label: 'TypeScript Snippets', slug: 'guides/typescript-snippets' },
 					],
 				},
 				{
@@ -51,6 +53,7 @@ export default defineConfig({
 					label: 'Project',
 					items: [
 						{ label: 'Live Stats', slug: 'stats' },
+						{ label: 'Feedback', slug: 'reference/feedback' },
 					],
 				},
 				{

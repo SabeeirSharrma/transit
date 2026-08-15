@@ -1,0 +1,152 @@
+---
+title: Feedback: Issues and Bugs Found During Integration
+description: Documentation for Feedback: Issues and Bugs Found During Integration
+---
+
+**Date:** July 20, 2026
+**Context:** Integrated Transit into the Stampd mail server project (Rust engine + Node/TS gateway + Python admin/filters services)
+
+---
+
+## Critical Issues
+
+### 1. Scanner addon not found when loaded via ESM import()
+
+**Problem:** When transit-js is imported via ESM (`import transit from "transit"`), the scanner's `index.js` (which is CJS) cannot find its native addon. Bun resolves the package through its own cache, and the scanner's `__dirname` points to the bun cache directory. The scanner looks for `index.node` but the actual file is named `transit-scanner.node`.
+
+**Symptoms:**
+```
+[transit] Scanner error for ...: @sabeeirsharrma/scanner: native addon not built.
+```
+
+**Workaround:** Create symlinks in both node_modules and bun cache:
+```bash
+ln -sf transit-scanner.node node_modules/@sabeeirsharrma/scanner/index.node
+ln -sf transit-scanner.node ~/.bun/install/cache/@sabeeirsharrma/scanner@1.0.2@@@1/index.node
+```
+
+**Suggestion:** The scanner's `index.js` should also check for `transit-scanner.node` in the candidates list, since that is the napi-rs default output name.
+
+### 2. Rust bridge requires napi addon, not plain pub fn
+
+**Problem:** The `RustDevBridge` loads a `.node`/`.so` native addon compiled with napi-rs. But the getting-started docs initially suggested plain `pub fn` functions without `#[napi]` annotations or the required Cargo.toml settings. If you follow the docs loosely, your Rust functions will be discovered by the scanner but will fail at runtime because no native addon exists.
+
+**What the engine needs:**
+- `Cargo.toml` must have `[lib] crate-type = ["cdylib", "lib"]`
+- Must depend on `napi` and `napi-derive`
+- Must have a `build.rs` with `napi_build::setup()`
+- Functions must be annotated with `#[napi]`, not just `pub fn`
+
+**Suggestion:** Make this crystal clear in the getting-started guide. Many users will not know that `pub fn` alone is not enough for the Rust bridge.
+
+### 3. Python entry point name is not documented clearly enough
+
+**Problem:** The `PythonProcessManager` auto-detects Python entry scripts by looking for specific filenames: `transit_service.py`, `service.py`, `main.py`, or `app.py`. If your file is named `server.py` or `filters.py`, Transit will not find it and you will get no error message beyond "Python process did not print PORT= within timeout."
+
+**What I expected:** Either `server.py` would work, or Transit would scan all `.py` files in the directory.
+
+**Suggestion:** Document the exact filenames that are auto-detected, and consider adding a `serverScript` option to `transit.python()` so users can specify a custom entry point.
+
+### 4. Python services need transit_server.py co-located
+
+**Problem:** The getting-started docs show `sys.path.insert(0, ...)` pointing to `packages/transit-py-runtime/` inside the Transit monorepo. This path is wrong for most real projects because:
+- The Transit monorepo path does not exist in the user's project
+- The path assumes a specific monorepo layout
+- In a real project, you need to copy `transit_server.py` into your Python service directory
+
+**What actually works:** Copy `transit_server.py` from the Transit monorepo into each Python service directory, then import it with a simple `from transit_server import ...`.
+
+**Suggestion:** The docs should say: "Copy `packages/transit-py-runtime/transit_service.py` into your Python directory. This file is the Transit server that handles communication with JavaScript."
+
+---
+
+## Moderate Issues
+
+### 5. Scanner candidate paths do not match napi-rs output
+
+**Problem:** The scanner's `index.js` looks for:
+```js
+join(__dirname, "index.node")
+join(__dirname, "target/release/libtransit_scanner.node")
+join(__dirname, "target/release/libtransit_scanner.so")
+```
+
+But napi-rs with `napi.binaryName = "transit-scanner"` produces `transit-scanner.node`, not `index.node`. The candidates list does not include the actual output filename.
+
+**Suggestion:** Add `transit-scanner.node` to the candidates, or use a glob pattern like `*.node` or `*.so`.
+
+### 6. Error messages are swallowed silently
+
+**Problem:** When the scanner fails to load, transit-js catches the error and silently returns an empty manifest:
+```js
+try {
+  const imported = await import("@sabeeirsharrma/scanner");
+  scannerModule = imported.default ?? imported;
+} catch {
+  // Scanner not compiled — functions will be discovered via bridge fallback
+}
+```
+
+This means the user sees "0 functions" with no explanation of why. The error message "native addon not built" is the only hint, and it appears as a console.error that can be lost in logs.
+
+**Suggestion:** Log a more prominent warning with actionable steps when the scanner fails to load. Something like:
+```
+WARNING: Transit scanner failed to load. Your Rust/Java/Python functions will not be discovered.
+To fix: run 'cd packages/transit-scanner && cargo build --release && cp target/release/libtransit_scanner.so index.node'
+```
+
+### 7. The getting-started guide assumes monorepo layout
+
+**Problem:** The getting-started guide references `packages/transit-py-runtime/`, `packages/transit-java-runtime/`, and other monorepo paths. A user who installed Transit via `bun install transit` does not have these paths. They only have `node_modules/transit/`.
+
+**Suggestion:** The getting-started guide should assume a standalone project layout and tell users where to find the runtime files, or bundle them in a way that is accessible from `node_modules`.
+
+### 8. No clear explanation of what Python functions receive
+
+**Problem:** The docs show Python functions like `def process_data(args_json):` but do not explain that `args_json` is a JSON string, not a parsed dictionary. Users will naturally try `def process_data(args):` and call `args.get("items")` directly, which will fail.
+
+**Suggestion:** Add a clear note: "Your Python function receives a JSON string. You must call `json.loads(args)` to get a dictionary."
+
+### 9. Java classpath auto-detection is fragile
+
+**Problem:** The `JavaDevBridge` tries to find the classpath by walking up directories looking for `build/`, `out/`, or `target/` containing `TransitService.class`. This is fragile because:
+- It hardcodes the class name `TransitService`
+- It does not work if the user has a different project structure
+- It gives no useful error message when it fails
+
+**Suggestion:** Document the expected classpath structure clearly, or allow the user to specify the classpath explicitly.
+
+---
+
+## Minor Issues
+
+### 10. The `transit init` command is not well documented
+
+**Problem:** The docs mention `transit init` but do not explain what it does in detail or what files it creates. It is unclear whether it sets up the entire project or just creates a config file.
+
+### 11. Build mode vs dev mode is confusing
+
+**Problem:** The docs describe both "dev mode" (with Proxy-based dynamic dispatch) and "build mode" (with generated typed stubs). It is not clear which mode you are in by default, or how to switch between them.
+
+### 12. The binary protocol docs are too technical for beginners
+
+**Problem:** The binary-protocol.md is excellent for contributors but overwhelming for new users. It should be marked as "advanced" or "for contributors" and the getting-started guide should not reference it.
+
+### 13. No mention of Bun-specific behavior
+
+**Problem:** Bun handles CJS/ESM interop differently from Node.js. The scanner's CJS `index.js` works in Node.js but may fail in Bun due to different module resolution. The docs should mention this.
+
+---
+
+## Summary of Suggested Improvements
+
+1. **Scanner `index.js`:** Add `transit-scanner.node` to the candidates list
+2. **Getting-started:** Clearly state that Rust functions need `#[napi]`, `crate-type = ["cdylib"]`, and `build.rs`
+3. **Getting-started:** Show how to copy `transit_server.py` into your project
+4. **Getting-started:** Explain that Python functions receive JSON strings, not dicts
+5. **Error messages:** Log prominent warnings when scanner fails to load
+6. **Python:** Document the exact entry point filenames that are auto-detected
+7. **Python:** Allow custom entry point via `serverScript` option
+8. **Docs:** Separate beginner and contributor documentation more clearly
+9. **Docs:** Mention Bun-specific considerations
+10. **Docs:** Remove monorepo-specific paths from getting-started guide

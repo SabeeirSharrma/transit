@@ -3,256 +3,173 @@ title: Architecture
 description: System design deep dive for Transit's polyglot interop engine.
 ---
 
-Transit is a polyglot interop system built around three core principles:
+This page explains how Transit works under the hood. You do not need to read this to use Transit, but it helps if you are curious or debugging issues.
 
-1. **No glue layers** — functions call each other directly across language boundaries
-2. **Zero source changes for basics** — the scanner discovers existing public functions automatically
-3. **Optimal transport per pair** — each language pair uses the fastest available mechanism
+## The Big Picture
 
-## System Overview
+When you write this code:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      Your JavaScript Code                     │
-│                                                               │
-│   const rs = transit.rust("./rust")                          │
-│   const jv = transit.java("./java")                          │
-│   const py = transit.python("./python")                       │
-│   const c  = transit.c("./c")                                │
-│   const cpp = transit.cpp("./cpp")                            │
-│   await rs.processFile(job)                                   │
-│   await jv.processSpecialized(result)                         │
-│   await py.processData(transformed)                           │
-│   await c.processChunk(data)                                  │
-│   await cpp.fastCompute(n)                                    │
-└─────────────┬────────────────────────────────┬───────────────┘
-              │                                │
-              ▼                                ▼
-┌─────────────────────┐          ┌─────────────────────────────┐
-│    transit-scanner   │          │       transit-js            │
-│    (Rust native)     │          │    (Public API + Proxy)     │
-│                      │          │                             │
-│  • tree-sitter parse │◄─────────│  scanDirectorySync()        │
-│  • manifest output   │          │  createLanguageHandle()     │
-│  • tier detection    │          │  FunctionProxy (Proxy)      │
-└─────────────────────┘          └──────┬──────────────┬───────┘
-                                        │              │
-                          ┌─────────────┘              └─────────────┐
-                          ▼                                          ▼
-┌──────────────────────────────────┐    ┌─────────────────────────────────┐
-│         RustDevBridge            │    │          JavaDevBridge          │
-│                                  │    │                                 │
-│  Loads .node native addon        │    │  Manages JVM process lifecycle  │
-│  Calls #[napi] functions        │    │  TCP binary protocol client     │
-│  In-process, zero-copy          │    │  Health checks + auto-restart   │
-│  Shared for Rust, C, and C++    │    └──────────────┬──────────────────┘
-└──────────────────┬───────────────┘                   │
-                   │                                   │
-                   ▼                                   ▼
-┌──────────────────────────────────┐    ┌─────────────────────────────────┐
-│       Your Rust/C/C++ Codebase   │    │      TransitServer (Java)       │
-│       (compiled .node addon)     │    │      (resident JVM process)     │
-└──────────────────────────────────┘    └─────────────────────────────────┘
+```js
+const rs = transit.rust("./rust");
+const greeting = await rs.greet("World");
 ```
 
-## Components
+Transit does three things:
 
-### transit-scanner (Rust)
+1. **Scans** your Rust files to find functions
+2. **Loads** the compiled Rust code
+3. **Calls** the Rust function and returns the result
 
-The scanner is written in Rust for performance. It's compiled to a native addon (`.node`) and loaded by transit-js at module init.
-
-**Capabilities:**
-- Fast directory walk with `.gitignore` awareness (via the `ignore` crate, same as ripgrep)
-- Tree-sitter parsing for Rust, JavaScript, Python, and Java grammars
-- Text-based fallback for Rust (`pub fn`) and Java (`public` methods)
-- Comment marker detection: `transit:file` (Tier 2) and `transit:function` (Tier 3)
-- Outputs a JSON manifest: `{ language, sourceFile, functionName, signature, exportTier }[]`
-
-**Why Rust:** Directory walking + tree-sitter parsing is CPU-bound work where Rust's speed matters. The scanner runs on every dev startup and will eventually run on file-save in watch mode.
-
-### transit-js (TypeScript)
-
-The public API surface. Exports the `transit` singleton and the `FunctionProxy` type.
-
-**Key classes:**
-- `Transit` — factory that creates and caches language handles
-- `RustDevBridge` — loads the native addon, dispatches calls (shared for Rust, C, and C++)
-- `JavaDevBridge` — manages the JVM process, dispatches calls via TCP
-- `PythonDevBridge` — manages the Python process, dispatches calls via TCP
-- `createLanguageHandle()` — builds a `Proxy` that resolves names against the manifest
-
-### transit-java-runtime (Java)
-
-A minimal TCP server (`TransitServer.java`) and example service (`TransitService.java`). No external dependencies.
-
-- Binds to `127.0.0.1` on an ephemeral port
-- Prints `PORT=<port>` to stdout for the parent process to read
-- Handles `CALL_REQUEST` and `HEALTH_PING` messages
-- Functions are registered via `server.registerFunction(name, fn)`
-
-### transit-java-runtime-js (TypeScript)
-
-The Node.js client for the Java TCP bridge.
-
-- `JavaProcessManager` — manages JVM lifecycle (spawn, port detection, connect, health checks, auto-restart)
-- Binary protocol encoder/decoder
-- Pending call tracking with timeouts
-
-### transit-py-runtime (Python)
-
-A minimal TCP server (`transit_server.py`) for Python function hosting. No external dependencies — uses only stdlib (`socket`, `struct`, `json`).
-
-- Binds to `127.0.0.1` on an ephemeral port
-- Prints `PORT=<port>` to stdout on startup
-- Handles `CALL_REQUEST`, `HEALTH_PING` messages
-- Functions registered via `register_function(name, fn)`
-- Same binary protocol as Java
-
-### transit-python-runtime-js (TypeScript)
-
-The Node.js client for the Python TCP bridge.
-
-- `PythonProcessManager` — manages Python process lifecycle (same pattern as `JavaProcessManager`)
-- Binary protocol encoder/decoder (identical to Java client)
-- Pending call tracking with timeouts
-
-### transit-schema (TypeScript)
-
-Shared type definitions for the Transit IDL, manifest, and configuration.
-
-### transit-codegen (TypeScript)
-
-Code generation from scanner manifests. Produces typed stubs and glue code.
-
-**Generators:**
-- `generateTypeScript(manifest)` — produces `transit.gen.ts` with typed function interfaces and a `createTransit()` factory
-- `generateJavaGlue(manifest)` — produces `TransitService.gen.java` with function registration stubs
-- `generatePythonGlue(manifest)` — produces `transit_service.gen.py` with function stubs and camelCase registrations
-
-### transit-cli (TypeScript)
-
-Command-line interface for Transit development workflow.
-
-**Commands:**
-- `transit init` — Scans source files for `transit.rust()`, `transit.java()`, `transit.python()`, `transit.c()`, and `transit.cpp()` calls, detects languages, and writes `transit.config.json`
-- `transit dev` — Live development mode with file watching, automatic re-scanning, and function change logging
-- `transit build` — Build pipeline that orchestrates scan → codegen → compile. Generates typed stubs and compiles Rust/Java/C/C++ code
-- `transit start` — Production mode with built artifacts, resident processes, and signal forwarding
-
-## Transport Strategies
-
-| Pair | Mechanism | Serialization | Latency |
-|------|-----------|---------------|---------|
-| JS ↔ Rust | In-process native addon | N/A (direct memory) | ~ns |
-| JS ↔ C | In-process native addon | N/A (direct memory) | ~ns |
-| JS ↔ C++ | In-process native addon | N/A (direct memory) | ~ns |
-| JS ↔ Java | TCP socket, binary protocol | Custom binary (10-byte header + payload) | ~ms |
-| JS ↔ Python | TCP socket, binary protocol | Custom binary (10-byte header + payload) | ~ms |
-| Rust ↔ Java | Socket (planned) | Binary | ~ms |
-
-### Why different transports?
-
-V8 (JavaScript) and native Rust/C/C++ code can share a process via N-API — this is how Node.js native addons work. A Rust function compiled with napi-rs is loaded directly into the Node.js process, giving true zero-copy interop. C and C++ use the same mechanism through `binding.gyp` or `CMakeLists.txt` builds.
-
-The JVM cannot share a process with V8. Java runs as a separate process, connected via TCP. To avoid the latency of per-request process startup, Transit keeps the JVM alive as a resident process.
-
-## Binary Protocol (JS ↔ Java)
-
-See [Binary Protocol](/reference/binary-protocol/) for the wire format specification.
-
-**Key design decisions:**
-- Little-endian, fixed 10-byte header (version, type, request ID, payload length)
-- Function names sent as length-prefixed UTF-8 strings
-- Arguments and results are JSON-encoded strings (not binary-encoded — simplicity over raw performance for v0.1)
-- Health checks keep the connection alive and detect crashed processes
-- TCP on loopback only (never exposed to the network)
-
-## Call Flow
-
-### JS → Rust (dev mode)
+Here is a simplified diagram of what happens:
 
 ```
-1. User calls: rs.processGeneral(job)
-2. Proxy intercepts property access "processGeneral"
-3. flatMap lookup finds the entry in the manifest
-4. Proxy returns a function that calls target._bridge.call("processGeneral", [job])
-5. RustDevBridge.call() looks up "processGeneral" (or "process_general") in the loaded addon
-6. The #[napi] function executes in-process
-7. Result is returned directly (no serialization for Rust→JS via N-API)
+Your JavaScript code
+       |
+       v
+  transit.rust("./rust")
+       |
+       v
+  Scanner finds: greet, add (from pub fn declarations)
+       |
+       v
+  Loads the compiled Rust code (index.node or .so file)
+       |
+       v
+  Returns a "proxy" object that looks like your functions
+       |
+       v
+  rs.greet("World") -> calls the actual Rust function -> returns result
 ```
 
-### JS → Java (dev mode)
+## The Components
+
+Transit has several parts that work together:
+
+### 1. The Scanner (transit-scanner)
+
+The scanner is a tool written in Rust that reads your source files and finds functions. It uses a technology called "tree-sitter" to understand the structure of your code.
+
+**What it does:**
+- Reads your `.rs`, `.py`, `.java`, `.c`, `.cpp`, `.js`, `.ts` files
+- Finds functions that are public
+- Detects special comments like `// transit:file`
+- Produces a list of discovered functions (called a "manifest")
+
+**Why it is fast:** The scanner is written in Rust, which is very fast at reading and parsing files. It also caches results so it does not re-scan files that have not changed.
+
+### 2. The JavaScript API (transit-js)
+
+This is the code you interact with. It provides the `transit.rust()`, `transit.java()`, `transit.python()`, `transit.c()`, and `transit.cpp()` functions.
+
+**What it does:**
+- Creates language handles (the `rs`, `jv`, `py`, `c`, `cpp` objects)
+- Manages communication with Rust, Java, Python, C, and C++
+- Handles errors and timeouts
+- Caches language handles so you do not create duplicates
+
+### 3. The Rust Bridge (RustDevBridge)
+
+When you call a Rust function, Transit loads a compiled Rust file (called a "native addon") directly into your JavaScript process. The same bridge is shared for C and C++ functions — `RustDevBridge` detects the language and loads the appropriate compiled addon.
+
+**How it works:**
+- Your Rust/C/C++ code is compiled into a `.node` or `.so` file
+- Transit loads this file using Node.js's native addon system
+- Function calls go directly to the native code — no network, no serialization
+- This is very fast (nanosecond-level latency)
+
+**What you need:**
+- **Rust:** `#[napi]` annotated `pub fn` functions with `crate-type = ["cdylib"]` in `Cargo.toml`
+- **C:** Functions declared via `#include <transit_c_glue.gen.h>` (generated from your function signatures)
+- **C++:** Functions declared via `#include <transit_cpp_glue.gen.h>` (generated from your function signatures)
+- The compiled `.node` file must be in your project directory
+
+### 4. The Python Bridge (PythonDevBridge)
+
+When you call a Python function, Transit starts a Python process in the background and communicates with it over a network connection.
+
+**How it works:**
+- Transit starts your Python script as a separate process
+- The Python script prints its port number to the console
+- Transit connects to that port using TCP
+- Function calls are sent as binary messages
+- The Python script processes the call and sends back a result
+
+**Why a separate process?** JavaScript and Python cannot share a process directly. They communicate over a network connection (on your computer only, not the internet).
+
+**Why it is fast after the first call:** The Python process stays running. Subsequent calls skip the startup time.
+
+### 5. The Java Bridge (JavaDevBridge)
+
+Works the same way as the Python bridge — starts a Java process and communicates over TCP.
+
+**What you need:**
+- Java code compiled with `javac`
+- A `TransitServer` class that handles communication
+- Your functions registered with `server.registerFunction()`
+
+## How Communication Works
+
+### Rust, C, and C++ (In-Process)
+
+```text
+JavaScript -> Loads .node file -> Calls Rust/C/C++ function directly -> Returns result
+```
+
+No network involved. The native code runs inside your JavaScript process. This is the fastest option.
+
+### Python and Java (TCP)
 
 ```
-1. User calls: jv.processSpecialized(data)
-2. Proxy intercepts, flatMap lookup succeeds
-3. JavaDevBridge.call() triggers doStart() if not started
-4. JVM is spawned, PORT=<port> is read from stdout
-5. TCP connection is established to 127.0.0.1:<port>
-6. Binary protocol: CALL_REQUEST message sent
-7. TransitServer dispatches to the registered function
-8. Function returns a JSON string
-9. CALL_RESPONSE message received by JavaProcessManager
-10. Result string is returned to the caller
+JavaScript -> Sends message to localhost:PORT -> Python/Java processes it -> Sends result back
 ```
 
-### JS → Python (dev mode)
+The message is small (just the function name and arguments as JSON). Communication happens over your computer's internal network (loopback), which is very fast.
 
+## Error Handling
+
+When something goes wrong, Transit gives you useful error messages:
+
+**Function not found:**
 ```
-1. User calls: py.processData(data)
-2. Proxy intercepts, flatMap lookup succeeds
-3. PythonDevBridge.call() triggers doStart() if not started
-4. Python process is spawned, PORT=<port> is read from stdout
-5. TCP connection is established to 127.0.0.1:<port>
-6. Binary protocol: CALL_REQUEST message sent
-7. transit_server.py dispatches to the registered function
-8. Function returns a JSON string
-9. CALL_RESPONSE message received by PythonProcessManager
-10. Result string is returned to the caller
+Function "nonexistent" not found in rust. Available: greet, add
 ```
 
-## Dev Mode vs Build Mode
+**Python/Java error:**
+```
+[python] processData: Division by zero
+```
 
-### Dev mode (current)
+**Process crashed:**
+```
+Python process exited (code=1, signal=null)
+```
 
-- `transit dev` starts a live development server
-- Scanner runs on startup, builds a manifest
-- `FunctionProxy` resolves names dynamically via `Proxy`
-- File watcher re-scans directories on changes
-- Rust: loads the `.node` addon directly
-- C/C++: loads the `.node` addon directly (same mechanism as Rust)
-- Java: spawns a resident JVM process on first call
-- Python: spawns a resident Python process on first call
-- Optimized for iteration speed, not raw throughput
+For Python and Java, if the process crashes, Transit automatically restarts it (up to 3 times).
 
-### Build mode
+## Performance
 
-- `transit build` runs the scan → codegen → compile pipeline
-- Codegen replaces dynamic `Proxy` with generated typed stubs (`transit.gen.ts`)
-- Rust: `cargo build --release` produces an optimized `.node` addon
-- C/C++: `node-gyp` or `cmake-js` compiles the native addon
-- Java: `javac` compiles classes
-- `dist/transit-manifest.json` records all discovered functions and compilation status
-- `transit start` loads the manifest and runs in production mode
-- No runtime scanning overhead in production
+| Language pair | Latency | Why |
+|---------------|---------|-----|
+| JavaScript <-> Rust | ~nanoseconds | Runs in the same process |
+| JavaScript <-> C | ~nanoseconds | Runs in the same process |
+| JavaScript <-> C++ | ~nanoseconds | Runs in the same process |
+| JavaScript <-> Python | ~milliseconds | Network communication |
+| JavaScript <-> Java | ~milliseconds | Network communication |
 
-## Directory Walking
+The first call to Python or Java is slower because it includes process startup time. After that, all calls are fast because the process stays running.
 
-The scanner skips these directories by default:
-- `node_modules`, `target`, `__pycache__`, `.git`, `dist`, `build`, `.next`, `vendor`
+## Security
 
-Hidden files are included (`.gitignore`-style hidden files are read).
+- Python and Java processes only listen on `127.0.0.1` (your computer only)
+- They reject connections from outside your computer
+- Each request has a unique ID to prevent confusion
+- No sensitive data leaves your machine
 
-## Error Model
+## What Happens When You Add a New Function
 
-**Rust errors:** N-API propagates Rust `Result::Err` as JavaScript exceptions. The error message from Rust is included in the exception.
+1. You write a new `pub fn` in Rust (or `def` in Python, `public` method in Java, or a C/C++ function with the right signature)
+2. You recompile if needed (Rust: `cargo build --release`, C/C++: `npm run build`, Java: `javac`)
+3. The next time Transit scans your code, it finds the new function
+4. You can call it immediately — no restart needed
 
-**C/C++ errors:** Same as Rust — N-API propagates errors as JavaScript exceptions. The error message from C/C++ is included in the exception.
-
-**Java errors:** If a Java function throws an exception, the server catches it and returns a `CALL_RESPONSE` with `STATUS_ERROR` and a JSON error message: `{"error": "..."}`.
-
-**Python errors:** If a Python function raises an exception, the server catches it and returns a `CALL_RESPONSE` with `STATUS_ERROR` and a JSON error message: `{"error": "..."}`.
-
-**Scanner errors:** If a file fails to parse, it's silently skipped. The scanner continues with the rest of the directory.
-
-**Bridge errors:** If the Java process crashes, it auto-restarts up to 3 times with exponential backoff. In-flight calls are rejected with an error.
+In development mode with `transit dev`, the scanner watches for file changes and updates automatically.

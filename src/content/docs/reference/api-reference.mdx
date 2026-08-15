@@ -3,384 +3,337 @@ title: API Reference
 description: Full API documentation for the Transit JavaScript interface.
 ---
 
-## `transit` (default export)
+This page lists all the Transit functions you can use in your JavaScript code.
 
-The main entry point. A singleton `Transit` instance.
-
-```js
-import { transit } from "transit"
-```
-
-### `transit.rust(dir): FunctionProxy`
-
-Scans a Rust source directory and returns a language handle.
+## Importing Transit
 
 ```js
-const rs = transit.rust("./rust")
+import { transit } from "transit";
 ```
 
-**Parameters:**
-- `dir` (string) — path to the directory containing Rust source files
+This gives you the main `transit` object. Everything starts from here.
 
-**Returns:** A `FunctionProxy` — a `Proxy`-based handle whose properties map to discovered functions.
+---
 
-**Behavior:**
-- Scans the directory with the tree-sitter scanner (Rust grammar)
-- Detects `pub fn` declarations as Tier 1 exports
-- Detects `// transit:file` and `// transit:function` markers
-- Loads the compiled native addon (`.node` or `.so`) from the directory
-- Caches the handle — calling `transit.rust(dir)` again with the same path returns the same handle
+## Setting Up Languages
 
-**Transport:** In-process native addon (via napi-rs). Zero serialization overhead.
+### `transit.rust(directory)`
 
-### `transit.java(dir, options?): FunctionProxy`
-
-Scans a Java source directory and returns a language handle.
+Tells Transit to look for Rust functions in the given folder.
 
 ```js
-const jv = transit.java("./java/src/main/java")
+const rs = transit.rust("./rust");
 ```
 
-**Parameters:**
-- `dir` (string) — path to the directory containing Java source files
-- `options` (optional):
-  - `classpath` (string) — Path to compiled Java classes. Transit auto-detects this by looking for `build/`, `out/`, or `target/` directories, but you can specify it explicitly.
-  - `mainClass` (string) — Fully qualified main class name. Default: `transit.java.TransitService`.
+**What it does:**
+1. Scans the folder for Rust files
+2. Finds all `pub fn` functions
+3. Loads the compiled Rust code (the `.node` file)
+4. Returns an object you can use to call those functions
 
-**Returns:** A `FunctionProxy` — same interface as Rust.
+**You need:**
+- The folder must contain Rust source files
+- The Rust code must be compiled (`cargo build --release`)
+- The compiled `.node` file must be in the folder or `target/release/`
 
-**Behavior:**
-- Scans for `public` methods (text-based detection)
-- Auto-discovers the compiled classpath by walking up parent directories looking for `build/`, `out/`, or `target/` containing `TransitService.class`
-- On first function call, spawns a resident JVM process and connects via TCP
-- The Java process stays alive across calls (no cold starts)
+**Example:**
+```js
+const rs = transit.rust("./rust");
+console.log(await rs.greet("World"));  // Calls the greet function in Rust
+```
 
-**Transport:** TCP binary protocol on `127.0.0.1` (ephemeral port).
+---
+
+### `transit.java(directory, options?)`
+
+Tells Transit to look for Java functions in the given folder.
+
+```js
+const jv = transit.java("./java/src/main/java");
+```
+
+**What it does:**
+1. Scans the folder for Java files
+2. Finds all `public` methods
+3. On first function call, starts a Java process in the background
+4. Returns an object you can use to call those functions
+
+**Options:**
+- `classpath` (string): Path to compiled Java classes. Transit auto-detects this by looking for `build/`, `out/`, or `target/` directories, but you can specify it explicitly.
+- `mainClass` (string): Fully qualified main class name. Default: `transit.java.TransitService`.
+
+**You need:**
+- The folder must contain Java source files
+- The Java code must be compiled (`javac`)
+- Java JDK 21+ must be installed
 
 **Examples:**
 ```js
 // Auto-detect classpath
-const jv = transit.java("./java/src/main/java")
+const jv = transit.java("./java/src/main/java");
 
 // Explicit classpath and main class
 const jv = transit.java("./java", {
   classpath: "./java/build",
   mainClass: "com.example.App"
-})
+});
 ```
 
-### `transit.python(dir, options?): FunctionProxy`
+---
 
-Scans a Python source directory and returns a language handle.
+### `transit.python(directory, options?)`
+
+Tells Transit to look for Python functions in the given folder.
 
 ```js
-const py = transit.python("./python")
+const py = transit.python("./python");
 ```
 
-**Parameters:**
-- `dir` (string) — path to the directory containing Python source files
-- `options` (optional):
-  - `serverScript` (string) — Custom entry point filename. Transit auto-detects `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, and `filters.py`. Use this if your file has a different name.
+**What it does:**
+1. Scans the folder for Python files
+2. Finds all top-level `def` functions
+3. On first function call, starts a Python process in the background
+4. Returns an object you can use to call those functions
 
-**Returns:** A `FunctionProxy` — same interface as Rust/Java.
+**Options:**
+- `serverScript` (string): Custom entry point filename. Transit auto-detects `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, and `filters.py`. Use this if your file has a different name.
 
-**Behavior:**
-- Scans for top-level `def` functions and `class` methods (tree-sitter Python grammar)
-- Detects `# transit:file` and `# transit:function` markers (Tiers 2/3)
-- Filters out private methods (`_` prefix)
-- Class methods are qualified as `ClassName.method_name`
-- On first function call, spawns a resident Python process and connects via TCP
-- The Python process stays alive across calls (no cold starts)
+**You need:**
+- The folder must contain Python files
+- The file must be named one of: `transit_service.py`, `service.py`, `main.py`, `app.py`, `server.py`, or `filters.py` (or specify `serverScript`)
+- The file must import and use `transit_server.py` (see getting-started guide)
+- Python 3.10+ must be installed
 
-**Transport:** TCP binary protocol on `127.0.0.1` (ephemeral port), same protocol as Java.
-
-:::caution[Python functions receive JSON strings]
-Your Python functions receive a JSON **string**, not a dictionary. Always use `json.loads(args)` to parse it.
-:::
+**Important:** Your Python functions receive a JSON **string**, not a dictionary. Always use `json.loads(args)` to parse it.
 
 **Examples:**
 ```js
 // Auto-detect entry point
-const py = transit.python("./python")
+const py = transit.python("./python");
 
 // Custom entry point
-const py = transit.python("./python", { serverScript: "filters.py" })
+const py = transit.python("./python", { serverScript: "filters.py" });
 ```
 
-### `transit.c(directory): FunctionProxy`
+---
 
-Scans a C source directory and returns a language handle.
+### `transit.c(directory)`
+
+Tells Transit to look for C functions in the given folder.
 
 ```js
-const c = transit.c("./c")
+const c = transit.c("./c");
 ```
 
-**Parameters:**
-- `dir` (string) — path to the directory containing C source files
+**What it does:**
+1. Scans the folder for C files
+2. Finds all exported functions (matching the C glue header signatures)
+3. On first function call, loads the compiled native addon (`.node` file)
+4. Returns an object you can use to call those functions
 
-**Returns:** A `FunctionProxy` — same interface as Rust/Java.
-
-**Behavior:**
-- Scans for C source files
-- Detects exported functions matching generated `transit_c_glue.gen.h` signatures
-- On first function call, loads the compiled native addon (`.node` or `.so`) from the directory
-- Caches the handle — calling `transit.c(dir)` again with the same path returns the same handle
-
-**Transport:** In-process native addon. Zero serialization overhead.
+**You need:**
+- The folder must contain C source files
+- The C code must be compiled with a `binding.gyp` or `node-gyp` setup
+- A C glue header (`transit_c_glue.gen.h`) generated by `transit build`
+- The compiled `.node` file must be in the folder
 
 **Example:**
 ```js
-const c = transit.c("./c")
-console.log(await c.processChunk({ data: [1, 2, 3] }))
+const c = transit.c("./c");
+console.log(await c.processChunk({ data: [1, 2, 3] }));
 ```
 
-### `transit.cpp(directory): FunctionProxy`
+---
 
-Scans a C++ source directory and returns a language handle.
+### `transit.cpp(directory)`
+
+Tells Transit to look for C++ functions in the given folder.
 
 ```js
-const cpp = transit.cpp("./cpp")
+const cpp = transit.cpp("./cpp");
 ```
 
-**Parameters:**
-- `dir` (string) — path to the directory containing C++ source files
+**What it does:**
+1. Scans the folder for C++ files
+2. Finds all exported functions (matching the C++ glue header signatures)
+3. On first function call, loads the compiled native addon (`.node` file)
+4. Returns an object you can use to call those functions
 
-**Returns:** A `FunctionProxy` — same interface as Rust/Java.
-
-**Behavior:**
-- Scans for C++ source files
-- Detects exported functions matching generated `transit_cpp_glue.gen.h` signatures
-- On first function call, loads the compiled native addon (`.node` or `.so`) from the directory
-- Caches the handle — calling `transit.cpp(dir)` again with the same path returns the same handle
-
-**Transport:** In-process native addon. Zero serialization overhead.
+**You need:**
+- The folder must contain C++ source files
+- The C++ code must be compiled with a `binding.gyp` or `node-gyp` setup
+- A C++ glue header (`transit_cpp_glue.gen.h`) generated by `transit build`
+- The compiled `.node` file must be in the folder
 
 **Example:**
 ```js
-const cpp = transit.cpp("./cpp")
-console.log(await cpp.fastCompute({ n: 42 }))
+const cpp = transit.cpp("./cpp");
+console.log(await cpp.fastCompute({ n: 42 }));
 ```
 
-### `transit.info(): void`
+---
 
-Prints all discovered functions for every registered language handle.
+## Calling Functions
 
-### `scanFileSync(filePath): ManifestEntry[]`
-
-Scan a single file and return its manifest entries. Useful for incremental updates in file watchers.
+Once you have set up a language, you call its functions like normal JavaScript functions:
 
 ```js
-import { scanFileSync } from "transit"
-const entries = scanFileSync("./src/lib.rs")
+const rs = transit.rust("./rust");
+const py = transit.python("./python");
+const c = transit.c("./c");
+const cpp = transit.cpp("./cpp");
+
+// Call Rust functions
+const greeting = await rs.greet("World");
+const sum = await rs.add(10, 20);
+
+// Call Python functions
+const result = await py.processData({ items: [1, 2, 3] });
+const stats = await py.getStats();
+
+// Call C functions
+const chunk = await c.processChunk({ data: [1, 2, 3] });
+
+// Call C++ functions
+const computed = await cpp.fastCompute({ n: 42 });
 ```
 
-### `invalidateFileCache(root, filePath): void`
+**Important:** Always use `await` when calling Transit functions. The first call may take a moment (especially for Python and Java), but subsequent calls are fast.
 
-Remove a specific file from the scan cache (e.g., when a file is deleted).
+---
 
-### `clearScanCache(root): void`
+## Listing Discovered Functions
 
-Clear the entire scan cache for a directory. Forces a full re-scan on next `scanDirectory` call.
+### `transit.info()`
+
+Prints a list of all functions Transit found:
 
 ```js
-transit.info()
-// rust (./rust): 3 functions
-//   - process_general [tier 1] (pub fn process_general(job: FileJob) -> ProcessResult)
-// java (./java): 2 functions
-//   - processSpecialized [tier 1] (public String processSpecialized(String argsJson))
+transit.info();
 ```
+
+Output:
+```
+rust (./rust): 2 functions
+  - greet [tier 1] (pub fn greet(name: String) -> String)
+  - add [tier 1] (pub fn add(a: i32, b: i32) -> i32)
+python (./python): 2 functions
+  - processData [tier 1] (def process_data(args_json))
+  - getStats [tier 1] (def get_stats(args_json))
+```
+
+This is helpful for debugging — if your function does not appear here, Transit did not find it.
+
+---
+
+## Handling Multiple Files with the Same Name
+
+If two files export functions with the same name, use the file name to pick which one:
+
+```js
+// If lib.rs and utils.rs both have a "process" function:
+await rs["lib"]["process"](data)    // Calls lib.rs's process
+await rs["utils"]["process"](data)  // Calls utils.rs's process
+
+// Dot notation also works:
+await rs.lib.process(data)
+```
+
+---
+
+## Cleaning Up
+
+### `py._bridge.stop()`
+
+Shuts down the Python process that Transit started in the background:
+
+```js
+await py._bridge.stop();
+```
+
+### `jv._bridge.stop()`
+
+Shuts down the Java process:
+
+```js
+await jv._bridge.stop();
+```
+
+**When to use this:** When your application is shutting down and you want to cleanly stop background processes. In most cases, you do not need to call this — the processes will stop when your application exits.
+
+---
+
+## Configuration
 
 ### `transit.config`
 
-The resolved configuration object (always complete with defaults). Read-only.
+The current Transit configuration (read-only):
 
 ```js
-console.log(transit.config.build.rust.command)  // "cargo build --release"
-console.log(transit.config.build.java.jvmArgs)  // ["-Xmx512m"]
-console.log(transit.config.maxRestarts)          // 3
+console.log(transit.config.build.rust.command);  // "cargo build --release"
+console.log(transit.config.maxRestarts);          // 3
 ```
 
-### `transit.configDir`
+### `transit.reloadConfig(directory?)`
 
-The directory the config was loaded from (usually `process.cwd()`).
-
-### `transit.reloadConfig(dir?): void`
-
-Reload config from disk. Call this if `transit.config.json` changes during development.
+Reloads the configuration from disk. Use this if you change `transit.config.json` while your app is running:
 
 ```js
-transit.reloadConfig()        // reload from same dir
-transit.reloadConfig("/app")  // reload from a different dir
+transit.reloadConfig();        // Reload from current directory
+transit.reloadConfig("/app");  // Reload from a different directory
 ```
 
 ---
 
-## Config Functions (from `@transit/schema`)
+## Error Handling
 
-These are also re-exported from the `transit` package for convenience.
+When a function call fails, Transit throws an error with useful information:
 
-### `loadConfig(dir): Required<TransitConfig> | null`
-
-Load, validate, and normalize `transit.config.json` from a directory. Returns `null` if no config file exists.
-
-```js
-import { loadConfig } from "transit"
-const config = loadConfig("/my/project")
-```
-
-### `loadConfigWithDefaults(dir): Required<TransitConfig>`
-
-Same as `loadConfig()` but returns full defaults when no config file exists (never returns null).
-
-### `validateConfig(raw): TransitConfig`
-
-Validate a raw JSON object against the Transit schema. Throws `ConfigError` with a specific message on invalid input.
-
-```js
-import { validateConfig } from "transit"
-try {
-  const config = validateConfig({ build: { rust: { command: 123 } } })
-} catch (err) {
-  console.error(err.message)
-  // "transit.config.json → build.rust.command: expected a string, got number"
-}
-```
-
-### `mergeWithDefaults(config): Required<TransitConfig>`
-
-Fill in Transit defaults for missing fields. Does not overwrite explicitly set values.
-
----
-
-## `FunctionProxy`
-
-The object returned by `transit.rust()`, `transit.java()`, etc. It's a JavaScript `Proxy` that dynamically resolves property access to function calls.
-
-### Calling functions
-
-```js
-// Flat namespace — works when function names are unique across files
-const result = await rs.processGeneral(job)
-const result = await jv.processSpecialized(data)
-```
-
-### Qualified calls (file disambiguation)
-
-When two files export functions with the same name:
-
-```js
-// Use bracket notation with the filename (without extension)
-await rs["lib"]["processGeneral"](job)
-await rs["utils"]["processGeneral"](job)
-```
-
-### Inspection properties
-
-These are available on any `FunctionProxy`:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `_manifest` | `Manifest` | The full scanner manifest |
-| `_bridge` | `RuntimeBridge` | The underlying transport bridge |
-| `_lang` | `string` | The language name (`"rust"`, `"java"`, etc.) |
-| `_functions()` | `() => ManifestEntry[]` | Returns all discovered function entries |
-
-### Error handling
-
-If a function is not found, the proxy throws:
-
-```
-Function "nonexistent" not found in rust. Available: process_general, version
-```
-
----
-
-## Types
-
-### `TransitError`
-
-Unified error type for all cross-language calls. Extends `Error`.
-
-```typescript
-class TransitError extends Error {
-  readonly language: string;    // "rust" | "java" | "python"
-  readonly functionName: string;
-  readonly cause: string;       // original error message
-  readonly raw: unknown;        // original error object
-}
-```
-
-**Example:**
 ```js
 try {
-  await rs.processJob(data)
+    await rs.nonexistentFunction(data);
 } catch (err) {
-  if (err instanceof TransitError) {
-    console.error(`Error in ${err.language}: ${err.cause}`)
-  }
+    console.error(err.message);
+    // "Function \"nonexistentFunction\" not found in rust. Available: greet, add"
 }
 ```
 
-### `ManifestEntry`
+If a Python or Java function raises an error, Transit wraps it:
 
-```typescript
-interface ManifestEntry {
-  language: string        // "rust" | "java" | "javascript" | "python"
-  sourceFile: string      // full path to the source file
-  functionName: string    // function name as declared in source
-  signature: string       // function signature (without body)
-  exportTier: 1 | 2 | 3   // export tier
-}
-```
-
-### `Manifest`
-
-```typescript
-interface Manifest {
-  entries: ManifestEntry[]
-  generatedAt: number     // timestamp (ms since epoch)
+```js
+try {
+    await py.processData(badData);
+} catch (err) {
+    console.error(err.message);
+    // "[python] processData: Division by zero"
 }
 ```
 
 ---
 
-## Naming conventions
+## Advanced: Scanning a Single File
 
-The scanner normalizes names between languages:
+If you are building a file watcher and want to scan one file at a time:
 
-- **snake_case** (Rust): `process_general` is registered under both `process_general` and `processGeneral`
-- **camelCase** (Java): `processSpecialized` is registered as `processSpecialized`
-- **JS/TS**: function names are used as-is
+```js
+import { scanFileSync } from "transit";
 
-All registrations are case-insensitive for the first letter and support both snake_case and camelCase lookup.
+const entries = scanFileSync("./src/lib.rs");
+console.log(entries);  // Array of discovered functions in that file
+```
 
 ---
 
-## Lifecycle
+## Advanced: Cache Management
 
-### Rust bridge
+Transit caches scan results to speed up subsequent startups. You can manage the cache:
 
-1. `transit.rust(dir)` scans the directory and creates a handle
-2. First function call triggers addon loading (`index.node` or `target/release/*.so`)
-3. Subsequent calls go directly to the loaded addon
-4. No cleanup needed — the addon lives in-process
+```js
+import { invalidateFileCache, clearScanCache } from "transit";
 
-### Java bridge
+// Remove one file from the cache (e.g., when a file is deleted)
+invalidateFileCache("./rust", "./rust/src/lib.rs");
 
-1. `transit.java(dir)` scans the directory and creates a handle
-2. First function call spawns the JVM process
-3. The process prints `PORT=<port>` to stdout on startup
-4. The bridge connects via TCP and starts health checks
-5. Subsequent calls go through the TCP connection
-6. If the process crashes, it auto-restarts (up to 3 times)
-7. Call `jv._bridge.stop()` to shut down the Java process
-
-### Python bridge
-
-1. `transit.python(dir)` scans the directory and creates a handle
-2. First function call spawns the Python process
-3. The process prints `PORT=<port>` to stdout on startup
-4. The bridge connects via TCP and starts health checks
-5. Subsequent calls go through the TCP connection
-6. If the process crashes, it auto-restarts (up to 3 times)
-7. Call `py._bridge.stop()` to shut down the Python process
+// Clear the entire cache for a directory
+clearScanCache("./rust");
+```

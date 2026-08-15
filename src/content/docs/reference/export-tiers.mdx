@@ -3,47 +3,127 @@ title: Export Tiers
 description: How Transit's three-tier system discovers functions in your source code.
 ---
 
-Transit discovers functions in your source code using a three-tier system. Higher tiers provide more control; Tier 1 requires zero source changes.
+When you write a function in Rust, Python, or Java, Transit can find it automatically. You do not need to register functions manually or write special configuration. Transit scans your code and discovers functions based on simple rules.
 
-## Tier 1 — Natively Public (Zero Changes)
+## The Three Tiers
 
-The scanner automatically discovers functions that are public by their language's own rules:
+Think of tiers like levels of permission:
 
-| Language | Detection Method | Example |
-|----------|-----------------|---------|
-| **Rust** | Text scan for `pub fn` / `pub async fn` | `pub fn process_job(job: FileJob) -> Result` |
-| **Java** | Text scan for lines starting with `public` + `(` | `public String processJob(String argsJson)` |
-| **JavaScript** | Tree-sitter query for `export_statement` + `function_declaration` | `export function processJob(data) {}` |
-| **Python** | Tree-sitter query for `function_definition` (non-underscore prefix) and class methods | `def process_job(data):` or `class Service: def process(self):` |
+- **Tier 1** (default): Transit finds functions that are already public in your language. No changes needed.
+- **Tier 2** (file-level): You put a comment at the top of a file to export everything in that file.
+- **Tier 3** (function-level): You put a comment above a specific function to export it, even if it is private.
 
-**No annotations, no markers, no source changes.** Just write normal code with normal visibility modifiers.
+Most people only need Tier 1.
+
+## Tier 1: Public Functions (No Changes Needed)
+
+Transit finds functions that are public by your language's own rules:
+
+### Rust
+
+Any function with `pub fn` is found automatically:
 
 ```rust
-// This is automatically discovered — it's a pub fn
-pub fn process_general(job: FileJob) -> ProcessResult { ... }
+// Transit finds this — it is a pub fn
+pub fn process_job(job: FileJob) -> ProcessResult {
+    // your code here
+}
+
+// Transit does NOT find this — it is not pub
+fn internal_helper(data: &[u8]) -> String {
+    format!("Internal: {} bytes", data.len())
+}
 ```
 
-```java
-// This is automatically discovered — it's a public method
-public String processSpecialized(String argsJson) { ... }
+**Important:** For Transit to call your Rust function from JavaScript, it must also be annotated with `#[napi]`. Here is a complete example:
+
+```rust
+use napi_derive::napi;
+
+#[napi]
+pub fn process_job(job: String) -> String {
+    format!("Processed: {}", job)
+}
 ```
+
+And your `Cargo.toml` must include:
+
+```toml
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = "2"
+napi-derive = "2"
+```
+
+### Python
+
+Any function defined at the top level of a file (not inside a class) is found:
 
 ```python
-# This is automatically discovered — it's a top-level def
-def process_job(data):
+# Transit finds this — it is a top-level def
+def process_data(data):
     return transform(data)
 
-# Class methods are also discovered (qualified as ClassName.method_name)
+# Transit also finds class methods
 class DataProcessor:
-    def process(self, data):
+    def process(self, data):  # Found as "DataProcessor.process"
         return transform(data)
+
+# Transit does NOT find this — it starts with underscore
+def _private_helper(data):
+    return optimized_path(data)
 ```
 
-**Python class detection:** Methods inside classes are automatically discovered and qualified with the class name (e.g., `DataProcessor.process`). Private methods (starting with `_`) are filtered out.
+**Important:** Your Python function receives a JSON string, not a parsed dictionary. You must call `json.loads()`:
 
-## Tier 2 — File-Level Export
+```python
+import json
 
-A comment marker at the top of a file exports all eligible functions in that file into the flat namespace:
+def process_data(args_json):
+    args = json.loads(args_json)  # Now args is a dictionary
+    items = args.get("items", [])
+    return json.dumps({"count": len(items)})
+```
+
+### Java
+
+Any `public` method is found:
+
+```java
+// Transit finds this — it is a public method
+public String processJob(String argsJson) {
+    return "{\"result\": \"done\"}";
+}
+
+// Transit does NOT find this — it is private
+private String internalHelper(String data) {
+    return data.toUpperCase();
+}
+```
+
+### JavaScript/TypeScript
+
+Any exported function is found:
+
+```js
+// Transit finds this — it is exported
+export function processJob(data) {
+    return { result: "done" };
+}
+
+// Transit does NOT find this — it is not exported
+function internalHelper(data) {
+    return data.toUpperCase();
+}
+```
+
+## Tier 2: File-Level Export
+
+If you want to export all functions in a file (including private ones), add a comment at the very top:
+
+### Rust
 
 ```rust
 // transit:file
@@ -53,12 +133,16 @@ pub fn helper_a() -> String { ... }
 pub fn helper_b() -> String { ... }
 ```
 
+### Python
+
 ```python
 # transit:file
 
 def process(data):
     return transform(data)
 ```
+
+### Java
 
 ```java
 // transit:file
@@ -69,11 +153,11 @@ public class Utils {
 }
 ```
 
-**Effect:** Functions in the file are available via the flat namespace (`rs.helperA()`) in addition to the qualified form.
+## Tier 3: Function-Level Export
 
-## Tier 3 — Function-Level Export
+If you want to export a specific private function, add a comment directly above it:
 
-A comment marker placed directly above a function exports that specific function, even if it would otherwise be private:
+### Rust
 
 ```rust
 // transit:function
@@ -82,24 +166,28 @@ fn internal_helper(data: &[u8]) -> String {
 }
 ```
 
+### Python
+
 ```python
 # transit:function
 def _private_transform(data):
     return optimized_path(data)
 ```
 
+### JavaScript
+
 ```js
 // transit:function
-function computeHash(buffer) { ... }
+function computeHash(buffer) {
+    // ...
+}
 ```
 
-**Key point:** Tier 3 overrides the language's visibility rules. A `_private`-prefixed Python function or a non-`pub` Rust function becomes callable from other languages when marked with `// transit:function`.
-
-This is intentional: the whole point is to export fast internal helpers that would be inconvenient to reimplement in another language.
+**Key point:** Tier 3 overrides the language's privacy rules. A function that would normally be hidden becomes callable from other languages.
 
 ## Name Disambiguation
 
-When multiple files export functions with the same name, the flat namespace uses the last one seen. To call a specific file's version, use the qualified form:
+If two files export functions with the same name, use the file name to pick which one:
 
 ```js
 // If lib.rs and utils.rs both export "process":
@@ -110,52 +198,34 @@ await rs["utils"]["process"](data)  // calls utils.rs's process
 await rs.lib.process(data)
 ```
 
-## Marker Syntax by Language
+## What the Scanner Produces
 
-| Language | Tier 2 (file) | Tier 3 (function) |
-|----------|---------------|-------------------|
-| Rust | `// transit:file` | `// transit:function` |
-| JavaScript | `// transit:file` | `// transit:function` |
-| TypeScript | `// transit:file` | `// transit:function` |
-| Python | `# transit:file` | `# transit:function` |
-| Java | `// transit:file` | `// transit:function` |
-
-## Why Comment Markers?
-
-Transit considered and rejected several alternatives:
-
-- **Decorator/annotation style** (`#[transit::export]`, `@Transit.Export`): Requires a library import in every file. Changes the language's syntax.
-- **Keyword substitution** (`tdef`, `transitfunc`): Requires a preprocessor to rewrite the file before compilation. Risk of the transformed version diverging from what the compiler sees.
-- **Comment markers**: Valid syntax in every language. No preprocessing needed. The scanner detects them during its normal tree-sitter parse pass. The developer's code runs unchanged.
-
-## Priority and Layering
-
-1. **Tier 1 baseline:** All natively public functions are always in the manifest
-2. **Tier 2/3 markers:** Add functions to the flat namespace (can include private functions)
-3. **Config overrides:** `transit.config.json` can add additional exports for generated/vendored code:
-
-```json
-{
-  "exports": [
-    { "file": "legacy/parser.rs", "function": "parse_legacy_format" }
-  ]
-}
-```
-
-Resolution order: Tier 1 + Tier 2/3 are discovered first, then config entries are added on top (union, not replacement).
-
-## Scanner Output
-
-The scanner produces a manifest entry for each discovered function:
+When Transit scans your code, it creates a list of discovered functions:
 
 ```json
 {
   "language": "rust",
   "sourceFile": "/path/to/lib.rs",
-  "functionName": "process_general",
-  "signature": "pub fn process_general(job: FileJob) -> ProcessResult",
+  "functionName": "process_job",
+  "signature": "pub fn process_job(job: FileJob) -> ProcessResult",
   "exportTier": 1
 }
 ```
 
-The transit-js layer normalizes names to support both `snake_case` and `camelCase` lookups. A Rust function `process_general` is callable as both `rs.process_general()` and `rs.processGeneral()`.
+This list is used by Transit to know which functions are available and how to call them.
+
+## Naming Between Languages
+
+Transit automatically handles naming differences between languages:
+
+- Rust uses `snake_case` (like `process_general`)
+- JavaScript uses `camelCase` (like `processGeneral`)
+- Java uses `camelCase` (like `processSpecialized`)
+
+You can call functions using either style:
+
+```js
+// Both work for a Rust function named process_general:
+await rs.process_general(data)
+await rs.processGeneral(data)
+```
