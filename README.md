@@ -1,5 +1,7 @@
 # Transit
 
+![Bundle](https://img.shields.io/bundlephobia/minzip/@sabeeirsharrma/transit)
+
 **Languages that just talk to each other. No API. No middleman.**
 
 Transit lets you write functions in Rust, Java, or Python and then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
