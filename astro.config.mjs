@@ -48,6 +48,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Project',
+					items: [
+						{ label: 'Live Stats', slug: 'stats' },
+					],
+				},
+				{
 					label: 'Contributing',
 					items: [
 						{ label: 'Contributing Guide', slug: 'guides/contributing' },
