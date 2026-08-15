@@ -150,11 +150,11 @@ For Python and Java, if the process crashes, Transit automatically restarts it (
 
 | Language pair | Latency | Why |
 |---------------|---------|-----|
-| JavaScript <-> Rust | ~nanoseconds | Runs in the same process |
-| JavaScript <-> C | ~nanoseconds | Runs in the same process |
-| JavaScript <-> C++ | ~nanoseconds | Runs in the same process |
-| JavaScript <-> Python | ~milliseconds | Network communication |
-| JavaScript <-> Java | ~milliseconds | Network communication |
+| JavaScript &lt;-&gt; Rust | ~nanoseconds | Runs in the same process |
+| JavaScript &lt;-&gt; C | ~nanoseconds | Runs in the same process |
+| JavaScript &lt;-&gt; C++ | ~nanoseconds | Runs in the same process |
+| JavaScript &lt;-&gt; Python | ~milliseconds | Network communication |
+| JavaScript &lt;-&gt; Java | ~milliseconds | Network communication |
 
 The first call to Python or Java is slower because it includes process startup time. After that, all calls are fast because the process stays running.
 
