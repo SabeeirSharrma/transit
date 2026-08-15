@@ -31,7 +31,7 @@ const __dirname = import.meta.dirname;
 const RESULTS_DIR = resolve(__dirname, "./results");
 
 // All backend names in display order
-const ALL_BACKENDS = ["fastapi", "transit_rust", "transit_python", "transit_java",
+const ALL_BACKENDS = ["fastapi", "transit_rust", "transit_python", "transit_java", "transit_c", "transit_cpp",
                       "grpc", "thrift", "unix_socket", "subprocess", "zeromq", "redis", "pyo3"];
 
 // ─── CLI Argument Parsing ────────────────────────────────────────────────────
@@ -549,9 +549,39 @@ async function main() {
     fs.copyFileSync(rustTarget, rustDest);
   }
 
+  // Build C native addon
+  console.log("  Building C native addon...");
+  const cProc = spawn("npx", ["node-gyp", "rebuild"], {
+    cwd: resolve(__dirname, "./transit/c"),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await new Promise((resolve) => cProc.on("close", resolve));
+  const cTarget = resolve(__dirname, "./transit/c/build/Release/benchmark_c.node");
+  const cDest = resolve(__dirname, "./transit/c/index.node");
+  if (fs.existsSync(cTarget)) {
+    fs.copyFileSync(cTarget, cDest);
+    console.log("  ✓ C addon built");
+  }
+
+  // Build C++ native addon
+  console.log("  Building C++ native addon...");
+  const cppProc = spawn("npx", ["node-gyp", "rebuild"], {
+    cwd: resolve(__dirname, "./transit/cpp"),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await new Promise((resolve) => cppProc.on("close", resolve));
+  const cppTarget = resolve(__dirname, "./transit/cpp/build/Release/benchmark_cpp.node");
+  const cppDest = resolve(__dirname, "./transit/cpp/index.node");
+  if (fs.existsSync(cppTarget)) {
+    fs.copyFileSync(cppTarget, cppDest);
+    console.log("  ✓ C++ addon built");
+  }
+
   // Start Transit
   const rs = transit.rust(resolve(__dirname, "./transit/rust"));
   const py = transit.python(resolve(__dirname, "./transit/python"), { env: { TRANSIT_USE_ORJSON: "1" } });
+  const cc = transit.c(resolve(__dirname, "./transit/c"));
+  const cpp = transit.cpp(resolve(__dirname, "./transit/cpp"));
 
   // Start Java
   console.log("  Compiling Java...");
@@ -705,6 +735,16 @@ async function main() {
           console.log(`${transitResults.java.mean.toFixed(2)}ms avg, ${transitResults.java.ops_per_sec.toFixed(1)} ops/s`);
         }
 
+        // C (in-process native addon)
+        process.stdout.write("  Transit/C          ... ");
+        transitResults.c = await runBenchmark(benchmark, "transit", { transitClient: cc });
+        console.log(`${transitResults.c.mean.toFixed(2)}ms avg, ${transitResults.c.ops_per_sec.toFixed(1)} ops/s`);
+
+        // C++ (in-process native addon)
+        process.stdout.write("  Transit/C++        ... ");
+        transitResults.cpp = await runBenchmark(benchmark, "transit", { transitClient: cpp });
+        console.log(`${transitResults.cpp.mean.toFixed(2)}ms avg, ${transitResults.cpp.ops_per_sec.toFixed(1)} ops/s`);
+
         // Additional backends
         const additionalResults = {};
 
@@ -776,6 +816,14 @@ async function main() {
           console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
         }
 
+        process.stdout.write("  Transit/C          ... ");
+        const cConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cc }, CONCURRENT);
+        console.log(`${cConc.mean.toFixed(2)}ms avg, ${cConc.ops_per_sec.toFixed(1)} ops/s`);
+
+        process.stdout.write("  Transit/C++        ... ");
+        const cppConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cpp }, CONCURRENT);
+        console.log(`${cppConc.mean.toFixed(2)}ms avg, ${cppConc.ops_per_sec.toFixed(1)} ops/s`);
+
         // Additional concurrent backends
         const additionalConc = {};
         const additionalConcBenchmarks = [
@@ -808,6 +856,8 @@ async function main() {
               rust: rustConc,
               python: pyConc,
               java: jv ? javaConc : null,
+              c: cConc,
+              cpp: cppConc,
             },
             additional: additionalConc,
           };
@@ -860,6 +910,7 @@ function printSummary(results) {
 
   const ADDITIONAL_NAMES = ["gRPC", "Thrift", "Unix Socket", "Subprocess", "ZeroMQ", "Redis", "PyO3"];
   const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java",
+                   "Transit/C", "Transit/C++",
                    ...ADDITIONAL_NAMES];
   const rows = [];
 
@@ -874,6 +925,8 @@ function printSummary(results) {
     row.push(data.transit?.rust?.mean ? `${data.transit.rust.mean.toFixed(2)}ms` : "-");
     row.push(data.transit?.python?.mean ? `${data.transit.python.mean.toFixed(2)}ms` : "-");
     row.push(data.transit?.java?.mean ? `${data.transit.java.mean.toFixed(2)}ms` : "N/A");
+    row.push(data.transit?.c?.mean ? `${data.transit.c.mean.toFixed(2)}ms` : "-");
+    row.push(data.transit?.cpp?.mean ? `${data.transit.cpp.mean.toFixed(2)}ms` : "-");
 
     for (const name of ADDITIONAL_NAMES) {
       const r = data.additional?.[name];
@@ -908,6 +961,8 @@ function printSummary(results) {
     if (data.transit?.rust?.mean) times["Transit/Rust"] = data.transit.rust.mean;
     if (data.transit?.python?.mean) times["Transit/Python"] = data.transit.python.mean;
     if (data.transit?.java?.mean) times["Transit/Java"] = data.transit.java.mean;
+    if (data.transit?.c?.mean) times["Transit/C"] = data.transit.c.mean;
+    if (data.transit?.cpp?.mean) times["Transit/C++"] = data.transit.cpp.mean;
     for (const name of ADDITIONAL_NAMES) {
       if (data.additional?.[name]?.mean) times[name] = data.additional[name].mean;
     }
@@ -966,6 +1021,8 @@ function generateMarkdown(results) {
       "Transit/Rust (ms)", "Transit/Rust (ops/s)",
       "Transit/Python (ms)", "Transit/Python (ops/s)",
       "Transit/Java (ms)", "Transit/Java (ops/s)",
+      "Transit/C (ms)", "Transit/C (ops/s)",
+      "Transit/C++ (ms)", "Transit/C++ (ops/s)",
       ...ADDITIONAL.flatMap(n => [`${n} (ms)`, `${n} (ops/s)`]),
       "Winner"];
     md.push(`| ${hdr.join(" | ")} |`);
@@ -985,6 +1042,10 @@ function generateMarkdown(results) {
       const pOps = data.transit?.python?.ops_per_sec ?? 0;
       const jt = data.transit?.java?.mean ?? Infinity;
       const jOps = data.transit?.java?.ops_per_sec ?? 0;
+      const ct = data.transit?.c?.mean ?? Infinity;
+      const cOps = data.transit?.c?.ops_per_sec ?? 0;
+      const cppt = data.transit?.cpp?.mean ?? Infinity;
+      const cppOps = data.transit?.cpp?.ops_per_sec ?? 0;
 
       const vals = [data.name];
       const pushMsOps = (ms, ops) => {
@@ -995,9 +1056,11 @@ function generateMarkdown(results) {
       pushMsOps(rt, rOps);
       pushMsOps(pt, pOps);
       pushMsOps(jt, jOps);
+      pushMsOps(ct, cOps);
+      pushMsOps(cppt, cppOps);
 
       // Additional backends
-      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt, "Transit/C": ct, "Transit/C++": cppt };
       for (const name of ADDITIONAL) {
         const r = data.additional?.[name];
         const ms = r?.mean ?? Infinity;
@@ -1028,6 +1091,8 @@ function generateMarkdown(results) {
       "Transit/Rust (ms)", "Transit/Rust (ops/s)",
       "Transit/Python (ms)", "Transit/Python (ops/s)",
       "Transit/Java (ms)", "Transit/Java (ops/s)",
+      "Transit/C (ms)", "Transit/C (ops/s)",
+      "Transit/C++ (ms)", "Transit/C++ (ops/s)",
       ...ADDITIONAL.flatMap(n => [`${n} (ms)`, `${n} (ops/s)`]),
       "Winner"];
     md.push(`| ${hdr.join(" | ")} |`);
@@ -1049,6 +1114,10 @@ function generateMarkdown(results) {
       const pOps = data.concurrent.transit?.python?.ops_per_sec ?? 0;
       const jt = data.concurrent.transit?.java?.mean ?? Infinity;
       const jOps = data.concurrent.transit?.java?.ops_per_sec ?? 0;
+      const ct = data.concurrent.transit?.c?.mean ?? Infinity;
+      const cOps = data.concurrent.transit?.c?.ops_per_sec ?? 0;
+      const cppt = data.concurrent.transit?.cpp?.mean ?? Infinity;
+      const cppOps = data.concurrent.transit?.cpp?.ops_per_sec ?? 0;
 
       const vals = [data.name];
       const pushMsOps = (ms, ops) => {
@@ -1059,8 +1128,10 @@ function generateMarkdown(results) {
       pushMsOps(rt, rOps);
       pushMsOps(pt, pOps);
       pushMsOps(jt, jOps);
+      pushMsOps(ct, cOps);
+      pushMsOps(cppt, cppOps);
 
-      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt };
+      const times = { "FastAPI": ft, "Transit/Rust": rt, "Transit/Python": pt, "Transit/Java": jt, "Transit/C": ct, "Transit/C++": cppt };
       for (const name of ADDITIONAL) {
         const r = data.concurrent.additional?.[name];
         const ms = r?.mean ?? Infinity;
@@ -1087,6 +1158,8 @@ function generateMarkdown(results) {
   md.push(`| Backend | Protocol | Serialization | Connection Model |`);
   md.push(`|---------|----------|---------------|------------------|`);
   md.push(`| **Transit/Rust** | In-process native addon | Zero-copy | Direct function call |`);
+  md.push(`| **Transit/C** | In-process native addon | Zero-copy | Direct function call |`);
+  md.push(`| **Transit/C++** | In-process native addon | Zero-copy | Direct function call |`);
   md.push(`| **Transit/Python** | TCP | Binary (orjson) | Persistent bridge |`);
   md.push(`| **Transit/Java** | TCP | Binary | Persistent bridge |`);
   md.push(`| **FastAPI** | HTTP/1.1 | JSON | HTTP request/response |`);
@@ -1098,7 +1171,7 @@ function generateMarkdown(results) {
   md.push(`| **Redis Pub/Sub** | TCP | JSON | Pub/Sub channels |`);
   md.push(`| **PyO3** | In-process via Python | Python dict | Direct FFI call |`);
   md.push(``);
-  md.push(`- Transit/Rust eliminates all IPC overhead — zero serialization, zero context switches`);
+  md.push(`- Transit/Rust, Transit/C, and Transit/C++ eliminate all IPC overhead — zero serialization, zero context switches`);
   md.push(`- Transit/Python and Transit/Java use a persistent TCP bridge — no HTTP overhead`);
   md.push(`- gRPC and Thrift use binary protocols but still require IPC serialization`);
   md.push(`- ZeroMQ and Unix Socket reduce overhead vs HTTP but still serialize to JSON`);

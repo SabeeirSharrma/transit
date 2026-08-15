@@ -4,16 +4,19 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@grpc/grpc-js": "^1.10.0",
-    "@grpc/proto-loader": "^0.7.10",
-    "@sabeeirsharrma/transit": "^2.6.0",
-    "ioredis": "^5.3.2",
-    "transit-cli": "^2.5.0",
-    "zeromq": "^6.0.0-beta.16"
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
+    "@sabeeirsharrma/transit": "latest",
+    "ioredis": "^6.0.0",
+    "node-addon-api": "^8.9.2",
+    "transit-cli": "latest",
+    "zeromq": "^6.6.0"
   },
   "scripts": {
     "benchmark": "node run-benchmark.js",
     "build:rust": "cd transit/rust && cargo build --release && cp target/release/libbenchmark_rust.so index.node",
+    "build:c": "cd transit/c && npx node-gyp rebuild && cp build/Release/benchmark_c.node index.node",
+    "build:cpp": "cd transit/cpp && npx node-gyp rebuild && cp build/Release/benchmark_cpp.node index.node",
     "build:java": "mkdir -p transit/java/build && javac -d transit/java/build transit/java/src/main/java/benchmark/java/BenchmarkService.java",
     "install:fastapi": "cd fastapi && uv venv && uv pip install -r requirements.txt",
     "start:fastapi": "fastapi/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000",
@@ -32,5 +35,9 @@
     "build:pyo3": "cd pyo3 && PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release",
     "setup": "npm run build:rust && npm run build:java && npm run install:fastapi && npm run install:grpc && npm run install:thrift && npm run install:unix-socket && npm run install:subprocess && npm run install:zeromq && npm run install:redis-pubsub && npm run build:pyo3",
     "setup:quick": "npm run build:rust && npm run build:java && npm run install:fastapi"
+  },
+  "allowScripts": {
+    "zeromq@6.6.0": true,
+    "protobufjs@7.6.5": true
   }
 }

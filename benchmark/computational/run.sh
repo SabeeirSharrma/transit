@@ -53,6 +53,14 @@ npm install
 echo "Building Rust native addon..."
 npm run build:rust
 
+# Build C native addon
+echo "Building C native addon..."
+npm run build:c
+
+# Build C++ native addon
+echo "Building C++ native addon..."
+npm run build:cpp
+
 # Build Java service
 echo "Building Java service..."
 npm run build:java
