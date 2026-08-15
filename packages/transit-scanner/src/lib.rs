@@ -318,18 +318,6 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                         let fn_name = after_fn[..paren_pos].trim();
                         let signature = trimmed.trim_end_matches('{').trim().to_string();
                         
-                        // Check for transit:function marker in preceding lines
-                        // by finding the byte offset of this line
-                        let mut byte_offset = 0;
-                        for (i, l) in source_str.lines().enumerate() {
-                            if i == line_idx {
-                                break;
-                            }
-                            byte_offset += l.len() + 1; // +1 for newline
-                        }
-                        
-                        // Create a virtual node position for marker detection
-                        // We check the source around this line for the marker
                         let has_marker = check_transit_marker_before_line(source, line_idx);
                         let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
                         
