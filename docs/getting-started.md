@@ -19,8 +19,9 @@ You will need some tools installed on your computer. Here is how to check:
 | **Rust** | Only if you want Rust functions | Type `rustc --version` |
 | **Python** 3.10+ | Only if you want Python functions | Type `python3 --version` |
 | **Java** JDK 21+ | Only if you want Java functions | Type `java --version` |
+| **C/C++** compiler (GCC, Clang, or MSVC) | Only if you want C/C++ functions | Type `gcc --version` or `g++ --version` |
 
-**If you only want Rust and Python**, you can skip Java entirely. Transit only loads what you ask it to.
+**If you only want Rust and Python**, you can skip Java and C/C++ entirely. Transit only loads what you ask it to.
 
 ## Step 0: Initialize Your Project (Optional)
 
@@ -34,7 +35,7 @@ bun install transit
 npx transit init
 ```
 
-`transit init` scans your project for `transit.rust()`, `transit.java()`, and `transit.python()` calls, detects which languages you are using, and creates `transit.config.json`. It is idempotent — safe to run multiple times.
+`transit init` scans your project for `transit.rust()`, `transit.java()`, `transit.python()`, `transit.c()`, and `transit.cpp()` calls, detects which languages you are using, and creates `transit.config.json`. It is idempotent — safe to run multiple times.
 
 If you prefer to set things up manually, skip this step and continue below.
 
@@ -402,6 +403,8 @@ You do not need to do anything special to export functions. Transit finds them a
 - **Rust:** Any function with `#[napi]` and `pub fn` is found
 - **Python:** Any top-level `def` function (not starting with `_`) is found
 - **Java:** Any `public` method is found
+- **C:** Any function matching the generated `transit_c_glue.gen.h` signatures is found
+- **C++:** Any function matching the generated `transit_cpp_glue.gen.h` signatures is found
 - **JavaScript:** Any `export function` is found
 
 If you have two files with the same function name, use this syntax:
@@ -427,6 +430,12 @@ my-project/
   java/
     src/main/java/...   # Your Java functions
     build/              # Compiled classes
+  c/
+    src/addon.c         # Your C functions
+    binding.gyp         # node-gyp build config
+  cpp/
+    src/addon.cpp       # Your C++ functions
+    binding.gyp         # node-gyp build config
   index.js              # Your JavaScript entry point
   transit.config.json   # Optional: transit init creates this
 ```

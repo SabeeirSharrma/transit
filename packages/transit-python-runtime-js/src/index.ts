@@ -251,6 +251,11 @@ export class PythonProcessManager {
         // TCP_NODELAY only applies to TCP sockets
         if (!this.socketPath) {
           socket.setNoDelay(true);
+          // Increase OS socket buffers for better throughput on large payloads
+          try {
+            (socket as any).setRecvBufferSize(262144); // 256KB
+            (socket as any).setSendBufferSize(262144); // 256KB
+          } catch {}
         }
         // Enable TCP keepalive to detect dead connections at OS level
         socket.setKeepAlive(true, 5000);
@@ -308,7 +313,10 @@ export class PythonProcessManager {
    */
   async callFunction(functionName: string, argsJson: string): Promise<string> {
     if (!this.ready || this.sockets.length === 0) {
-      throw new Error("Python process not ready");
+      const reason = !this.ready
+        ? "Python process is not ready (startup may have failed or process crashed)"
+        : "Python process has no open sockets";
+      throw new Error(`${reason}. Function: ${functionName}`);
     }
 
     // Convert snake_case → camelCase (cached to avoid per-call regex)
@@ -353,7 +361,15 @@ export class PythonProcessManager {
     const result = response.subarray(15, 15 + resultLen).toString("utf-8");
 
     if (status === STATUS_ERROR) {
-      throw new Error(JSON.parse(result).error || "Python function returned error");
+      try {
+        const parsed = JSON.parse(result);
+        throw new Error(parsed.error || "Python function returned error");
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          throw new Error(`Python function returned invalid error response: ${result.slice(0, 200)}`);
+        }
+        throw e;
+      }
     }
 
     return result;
@@ -381,7 +397,15 @@ export class PythonProcessManager {
 
       // Round-robin across socket pool
       const socket = this.sockets[this.requestIdCounter % this.sockets.length];
-      socket.write(message);
+      const writeFailed = (err: Error) => {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        reject(new Error(`Socket write failed (requestId=${requestId}): ${err.message}`));
+      };
+      socket.once("error", writeFailed);
+      socket.write(message, () => {
+        socket.removeListener("error", writeFailed);
+      });
     });
   }
 

@@ -146,6 +146,8 @@ function discoverLanguageDirs(dir: string, config: TransitConfig): LanguageDir[]
         rust: [".rs"],
         java: [".java"],
         python: [".py"],
+        c: [".c", ".h"],
+        cpp: [".cpp", ".cc", ".cxx", ".hpp", ".hxx"],
       };
 
       for (const entry of entries) {
@@ -176,6 +178,8 @@ function detectLanguageFromExtension(file: string): string | null {
   if (file.endsWith(".rs")) return "rust";
   if (file.endsWith(".java")) return "java";
   if (file.endsWith(".py")) return "python";
+  if (file.endsWith(".c") || file.endsWith(".h")) return "c";
+  if (file.endsWith(".cpp") || file.endsWith(".cc") || file.endsWith(".cxx") || file.endsWith(".hpp") || file.endsWith(".hxx")) return "cpp";
   return null;
 }
 
@@ -190,6 +194,12 @@ function getLanguageDirCandidates(lang: string, rootDir: string): LanguageDir[] 
       break;
     case "python":
       candidates.push(["python", "."]);
+      break;
+    case "c":
+      candidates.push(["c", "src"], ["c", "."]);
+      break;
+    case "cpp":
+      candidates.push(["cpp", "src"], ["cpp", "."]);
       break;
   }
   return candidates.map(([l, subDir]) => ({
@@ -308,6 +318,69 @@ function compileJava(dir: string, verbose: boolean): { success: boolean; error?:
   }
 }
 
+function compileNative(dir: string, lang: "c" | "cpp", verbose: boolean): { success: boolean; error?: string } {
+  // Check for binding.gyp (node-gyp) or CMakeLists.txt (cmake-js)
+  const bindingGypPath = join(dir, "binding.gyp");
+  const cmakePath = join(dir, "CMakeLists.txt");
+
+  if (existsSync(bindingGypPath)) {
+    return compileWithNodeGyp(dir, verbose);
+  } else if (existsSync(cmakePath)) {
+    return compileWithCmakeJs(dir, lang, verbose);
+  } else {
+    return { success: false, error: `No binding.gyp or CMakeLists.txt found in ${dir}` };
+  }
+}
+
+function compileWithNodeGyp(dir: string, verbose: boolean): { success: boolean; error?: string } {
+  try {
+    const cmd = "npx node-gyp rebuild";
+    if (verbose) console.log(`[transit] Running: ${cmd} in ${dir}`);
+    execSync(cmd, { cwd: dir, stdio: verbose ? "inherit" : "pipe" });
+
+    // node-gyp outputs to build/Release/<name>.node
+    const buildDir = join(dir, "build", "Release");
+    if (existsSync(buildDir)) {
+      const nodeFiles = readdirSync(buildDir).filter((f: string) => f.endsWith(".node"));
+      if (nodeFiles.length > 0) {
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: "Build completed but no .node file found" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+function compileWithCmakeJs(dir: string, lang: "c" | "cpp", verbose: boolean): { success: boolean; error?: string } {
+  try {
+    // cmake-js requires configuration
+    const buildDir = join(dir, "build");
+    if (!existsSync(buildDir)) {
+      mkdirSync(buildDir, { recursive: true });
+    }
+
+    const configureCmd = "npx cmake-js configure";
+    if (verbose) console.log(`[transit] Running: ${configureCmd} in ${dir}`);
+    execSync(configureCmd, { cwd: dir, stdio: verbose ? "inherit" : "pipe" });
+
+    const buildCmd = "npx cmake-js build";
+    if (verbose) console.log(`[transit] Running: ${buildCmd} in ${dir}`);
+    execSync(buildCmd, { cwd: dir, stdio: verbose ? "inherit" : "pipe" });
+
+    // cmake-js outputs to build/<name>.node
+    const nodeFiles = readdirSync(buildDir).filter((f: string) => f.endsWith(".node"));
+    if (nodeFiles.length > 0) {
+      return { success: true };
+    }
+
+    return { success: false, error: "Build completed but no .node file found" };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
 // ─── Main build function ────────────────────────────────────────────────────
 
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
@@ -367,7 +440,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   };
 
   // Import codegen dynamically
-  const { generateTypeScript, generateJavaGlue, generatePythonGlue } = await import("@sabeeirsharrma/codegen");
+  const { generateTypeScript, generateJavaGlue, generatePythonGlue, generateCGlue, generateCppGlue } = await import("@sabeeirsharrma/codegen");
 
   // Generate TypeScript
   const tsCode = generateTypeScript(manifest, { outputPath: "transit.gen.ts" });
@@ -396,6 +469,24 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
     console.log(`[transit] Generated transit_service.gen.py (${pyEntries.length} functions)`);
   }
 
+  // Generate C glue
+  const cEntries = allEntries.filter((e) => e.language === "c");
+  if (cEntries.length > 0) {
+    const cCode = generateCGlue(manifest);
+    const cPath = join(outDir, "transit_c_glue.gen.h");
+    writeFileSync(cPath, cCode, "utf-8");
+    console.log(`[transit] Generated transit_c_glue.gen.h (${cEntries.length} functions)`);
+  }
+
+  // Generate C++ glue
+  const cppEntries = allEntries.filter((e) => e.language === "cpp");
+  if (cppEntries.length > 0) {
+    const cppCode = generateCppGlue(manifest);
+    const cppPath = join(outDir, "transit_cpp_glue.gen.h");
+    writeFileSync(cppPath, cppCode, "utf-8");
+    console.log(`[transit] Generated transit_cpp_glue.gen.h (${cppEntries.length} functions)`);
+  }
+
   // 6. Compile (unless codegen-only)
   if (!codegenOnly) {
     console.log("[transit] Compiling...");
@@ -411,6 +502,12 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
             break;
           case "java":
             result.compiled.java = compileJava(ld.absDir, verbose);
+            break;
+          case "c":
+            result.compiled.c = compileNative(ld.absDir, "c", verbose);
+            break;
+          case "cpp":
+            result.compiled.cpp = compileNative(ld.absDir, "cpp", verbose);
             break;
           // Python doesn't need compilation
         }
