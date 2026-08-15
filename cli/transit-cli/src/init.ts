@@ -15,10 +15,10 @@ import type { TransitConfig } from "@sabeeirsharrma/schema";
 // ─── Language detection ──────────────────────────────────────────────────────
 
 /** Pattern that matches transit.<lang>("path") calls */
-const TRANSIT_CALL_RE = /transit\.(rust|java|python)\s*\(\s*["'`]([^"'`]+)["'`]/g;
+const TRANSIT_CALL_RE = /transit\.(rust|java|python|c|cpp)\s*\(\s*["'`]([^"'`]+)["'`]/g;
 
 /** Pattern that matches transit.<lang>(resolve(__dirname, "path")) calls */
-const TRANSIT_RESOLVE_RE = /transit\.(rust|java|python)\s*\(\s*resolve\s*\([^,]+,\s*["'`]([^"'`]+)["'`]/g;
+const TRANSIT_RESOLVE_RE = /transit\.(rust|java|python|c|cpp)\s*\(\s*resolve\s*\([^,]+,\s*["'`]([^"'`]+)["'`]/g;
 
 /** Source file extensions to scan */
 const SCANNABLE_EXTENSIONS = new Set([
@@ -33,7 +33,7 @@ const SKIP_DIRS = new Set([
 ]);
 
 interface DetectedLanguage {
-  lang: "rust" | "java" | "python";
+  lang: "rust" | "java" | "python" | "c" | "cpp";
   /** Relative path to the source directory passed to transit.<lang>() */
   dir: string;
   /** Absolute path resolved from project root */
@@ -111,7 +111,7 @@ function scanFileForTransitCalls(filePath: string): DetectedLanguage[] {
     let match: RegExpExecArray | null;
     regex.lastIndex = 0;
     while ((match = regex.exec(content)) !== null) {
-      const lang = match[1] as "rust" | "java" | "python";
+      const lang = match[1] as "rust" | "java" | "python" | "c" | "cpp";
       const dir = match[2];
       if (!dir) continue;
       const key = `${lang}:${dir}`;
@@ -163,6 +163,14 @@ function checkPackageInstalled(lang: string, projectDir: string): string | null 
         if (content.includes("transit")) return null;
       }
       return `Python: no transit dependency found in requirements.txt or pyproject.toml`;
+    }
+    case "c":
+    case "cpp": {
+      // Check for binding.gyp or CMakeLists.txt
+      const bindingPath = join(projectDir, "binding.gyp");
+      const cmakePath = join(projectDir, "CMakeLists.txt");
+      if (existsSync(bindingPath) || existsSync(cmakePath)) return null;
+      return `C/C++: no binding.gyp or CMakeLists.txt found for native addon build`;
     }
     default:
       return null;
@@ -296,6 +304,102 @@ function copyPythonRuntimeFiles(pythonDir: string, projectDir: string): string[]
   return warnings;
 }
 
+function copyCTemplateFiles(cDir: string, projectDir: string): string[] {
+  const warnings: string[] = [];
+  const templateDir = join(projectDir, "node_modules", "@sabeeirsharrma", "transit", "templates", "c");
+
+  // Check if template directory exists
+  if (!existsSync(templateDir)) {
+    warnings.push("C: template directory not found in node_modules");
+    return warnings;
+  }
+
+  // Copy binding.gyp if it doesn't exist
+  const bindingGypTarget = join(cDir, "binding.gyp");
+  const bindingGypSource = join(templateDir, "binding.gyp");
+  if (!existsSync(bindingGypTarget) && existsSync(bindingGypSource)) {
+    mkdirSync(cDir, { recursive: true });
+    copyFileSync(bindingGypSource, bindingGypTarget);
+    console.log(`[transit] Copied binding.gyp to ${bindingGypTarget}`);
+  }
+
+  // Copy package.json if it doesn't exist
+  const packageJsonTarget = join(cDir, "package.json");
+  const packageJsonSource = join(templateDir, "package.json");
+  if (!existsSync(packageJsonTarget) && existsSync(packageJsonSource)) {
+    copyFileSync(packageJsonSource, packageJsonTarget);
+    console.log(`[transit] Copied package.json to ${packageJsonTarget}`);
+  }
+
+  // Copy example source file if src directory is empty
+  const srcDir = join(cDir, "src");
+  if (existsSync(srcDir)) {
+    try {
+      const entries = readdirSync(srcDir);
+      if (entries.length === 0) {
+        const exampleSource = join(templateDir, "src", "addon.c");
+        const exampleTarget = join(srcDir, "addon.c");
+        if (existsSync(exampleSource)) {
+          copyFileSync(exampleSource, exampleTarget);
+          console.log(`[transit] Copied example addon.c to ${exampleTarget}`);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return warnings;
+}
+
+function copyCppTemplateFiles(cppDir: string, projectDir: string): string[] {
+  const warnings: string[] = [];
+  const templateDir = join(projectDir, "node_modules", "@sabeeirsharrma", "transit", "templates", "cpp");
+
+  // Check if template directory exists
+  if (!existsSync(templateDir)) {
+    warnings.push("C++: template directory not found in node_modules");
+    return warnings;
+  }
+
+  // Copy binding.gyp if it doesn't exist
+  const bindingGypTarget = join(cppDir, "binding.gyp");
+  const bindingGypSource = join(templateDir, "binding.gyp");
+  if (!existsSync(bindingGypTarget) && existsSync(bindingGypSource)) {
+    mkdirSync(cppDir, { recursive: true });
+    copyFileSync(bindingGypSource, bindingGypTarget);
+    console.log(`[transit] Copied binding.gyp to ${bindingGypTarget}`);
+  }
+
+  // Copy package.json if it doesn't exist
+  const packageJsonTarget = join(cppDir, "package.json");
+  const packageJsonSource = join(templateDir, "package.json");
+  if (!existsSync(packageJsonTarget) && existsSync(packageJsonSource)) {
+    copyFileSync(packageJsonSource, packageJsonTarget);
+    console.log(`[transit] Copied package.json to ${packageJsonTarget}`);
+  }
+
+  // Copy example source file if src directory is empty
+  const srcDir = join(cppDir, "src");
+  if (existsSync(srcDir)) {
+    try {
+      const entries = readdirSync(srcDir);
+      if (entries.length === 0) {
+        const exampleSource = join(templateDir, "src", "addon.cpp");
+        const exampleTarget = join(srcDir, "addon.cpp");
+        if (existsSync(exampleSource)) {
+          copyFileSync(exampleSource, exampleTarget);
+          console.log(`[transit] Copied example addon.cpp to ${exampleTarget}`);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return warnings;
+}
+
 /**
  * Copy runtime files for a detected language to its directory.
  */
@@ -305,6 +409,10 @@ function copyRuntimeFiles(lang: DetectedLanguage, projectDir: string): string[] 
       return copyJavaRuntimeFiles(lang.absDir, projectDir);
     case "python":
       return copyPythonRuntimeFiles(lang.absDir, projectDir);
+    case "c":
+      return copyCTemplateFiles(lang.absDir, projectDir);
+    case "cpp":
+      return copyCppTemplateFiles(lang.absDir, projectDir);
     default:
       return [];
   }
@@ -336,6 +444,16 @@ function generateConfig(languages: DetectedLanguage[]): TransitConfig {
     config.build.python = config.build.python ?? {};
   }
 
+  if (detectedLangs.has("c")) {
+    config.build = config.build ?? {};
+    config.build.c = config.build.c ?? {};
+  }
+
+  if (detectedLangs.has("cpp")) {
+    config.build = config.build ?? {};
+    config.build.cpp = config.build.cpp ?? {};
+  }
+
   // Generate exports from detected directories
   config.exports = [];
   for (const lang of languages) {
@@ -349,6 +467,8 @@ function generateConfig(languages: DetectedLanguage[]): TransitConfig {
           rust: [".rs"],
           java: [".java"],
           python: [".py"],
+          c: [".c", ".h"],
+          cpp: [".cpp", ".cc", ".cxx", ".hpp", ".hxx"],
         };
         return extMap[lang.lang]?.includes(ext);
       });
@@ -412,7 +532,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
   if (languages.length === 0) {
     console.log("[transit] No transit usage detected in source files.");
-    console.log("[transit] Add transit.rust(), transit.java(), or transit.python() calls to your code.");
+    console.log("[transit] Add transit.rust(), transit.java(), transit.python(), transit.c(), or transit.cpp() calls to your code.");
     return {
       languages: [],
       configExisted: existsSync(join(projectDir, "transit.config.json")),

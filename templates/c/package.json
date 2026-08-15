@@ -1,0 +1,14 @@
+{
+  "name": "transit-c-addon",
+  "version": "1.0.0",
+  "description": "Transit C native addon",
+  "main": "build/Release/transit_addon.node",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "gypfile": true
+}

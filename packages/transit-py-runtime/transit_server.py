@@ -83,6 +83,25 @@ HEADER_FORMAT = "<BBII"  # little-endian: version, type, request_id, payload_len
 
 _functions = {}
 
+# Pre-cached error response bytes for "function not found" (avoids per-call serialization)
+_CACHED_NOT_FOUND_RESPONSES: dict[str, bytearray] = {}
+
+
+def _build_not_found_response(request_id: int, fn_name: str) -> bytearray:
+    """Build a pre-cached error response for a missing function."""
+    err_json = json.dumps({"error": f"Function '{fn_name}' not found. Available: {list(_functions.keys())}"})
+    err_bytes = err_json.encode("utf-8")
+    payload_size = 1 + 4 + len(err_bytes)  # status(1) + result_len(4) + result(N)
+    total_size = HEADER_SIZE + payload_size
+    resp = bytearray(total_size)
+    struct.pack_into(
+        HEADER_FORMAT, resp, 0,
+        PROTOCOL_VERSION, TYPE_CALL_RESPONSE, request_id, payload_size,
+    )
+    struct.pack_into("<BI", resp, HEADER_SIZE, STATUS_ERROR, len(err_bytes))
+    resp[HEADER_SIZE + 5 :] = err_bytes
+    return resp
+
 
 def register_function(name, fn):
     """Register a function that can be called from JS.
@@ -92,6 +111,8 @@ def register_function(name, fn):
         fn: Callable that takes a JSON string and returns a JSON string
     """
     _functions[name] = fn
+    # Invalidate cached not-found responses since available functions changed
+    _CACHED_NOT_FOUND_RESPONSES.clear()
     print(f"[transit-py] Registered function: {name}", file=sys.stderr)
 
 
@@ -113,6 +134,9 @@ class TransitServer:
         self._call_executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
         self._lock = threading.Lock()
         self._active_clients = 0
+        # Buffer pool: reuse bytearray allocations across _recv_exact calls
+        self._buf_pool: list[bytearray] = []
+        self._buf_pool_lock = threading.Lock()
 
     @property
     def port(self):
@@ -121,6 +145,14 @@ class TransitServer:
     @property
     def socket_path(self):
         return self._socket_path
+
+    def _tune_buffers(self, sock: socket.socket):
+        """Increase OS socket buffers for better throughput on large payloads."""
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 262144)  # 256KB
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 262144)  # 256KB
+        except OSError:
+            pass  # kernel may cap these; silently ignore
 
     def _use_uds(self):
         """Determine whether to use Unix domain sockets."""
@@ -152,6 +184,7 @@ class TransitServer:
         self._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server_socket.bind(self._socket_path)
         self._server_socket.listen(50)
+        self._tune_buffers(self._server_socket)
         self._running = True
 
         # Register crash cleanup
@@ -173,6 +206,7 @@ class TransitServer:
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(("127.0.0.1", 0))
         self._server_socket.listen(50)
+        self._tune_buffers(self._server_socket)
         self._port = self._server_socket.getsockname()[1]
         self._running = True
 
@@ -297,10 +331,7 @@ class TransitServer:
             # Look up and call the function
             fn = _functions.get(fn_name)
             if fn is None:
-                status = STATUS_ERROR
-                result_json = json.dumps(
-                    {"error": f"Function '{fn_name}' not found. Available: {list(_functions.keys())}"}
-                )
+                resp = _build_not_found_response(request_id, fn_name)
             else:
                 try:
                     result_json = fn(args_json)
@@ -309,21 +340,21 @@ class TransitServer:
                     status = STATUS_ERROR
                     result_json = json.dumps({"error": str(e)})
 
-            # Write response — single allocation via pack_into
-            result_bytes = result_json.encode("utf-8")
-            result_len = len(result_bytes)
-            payload_size = 1 + 4 + result_len  # status(1) + result_len(4) + result(N)
-            total_size = HEADER_SIZE + payload_size
-            resp = bytearray(total_size)
-            struct.pack_into(
-                HEADER_FORMAT, resp, 0,
-                PROTOCOL_VERSION,
-                TYPE_CALL_RESPONSE,
-                request_id,
-                payload_size,
-            )
-            struct.pack_into("<BI", resp, HEADER_SIZE, status, result_len)
-            resp[HEADER_SIZE + 5 :] = result_bytes
+                # Write response — single allocation via pack_into
+                result_bytes = result_json.encode("utf-8")
+                result_len = len(result_bytes)
+                payload_size = 1 + 4 + result_len  # status(1) + result_len(4) + result(N)
+                total_size = HEADER_SIZE + payload_size
+                resp = bytearray(total_size)
+                struct.pack_into(
+                    HEADER_FORMAT, resp, 0,
+                    PROTOCOL_VERSION,
+                    TYPE_CALL_RESPONSE,
+                    request_id,
+                    payload_size,
+                )
+                struct.pack_into("<BI", resp, HEADER_SIZE, status, result_len)
+                resp[HEADER_SIZE + 5 :] = result_bytes
 
             # Acquire lock only for the write to prevent interleaved responses
             # Skip when write_lock is None (single-client fast path)
@@ -344,21 +375,37 @@ class TransitServer:
         else:
             client.sendall(resp)
 
+    def _acquire_buf(self, n: int) -> bytearray:
+        """Acquire a buffer from the pool, or allocate if pool is empty."""
+        with self._buf_pool_lock:
+            if self._buf_pool:
+                return self._buf_pool.pop()
+        return bytearray(n)
+
+    def _release_buf(self, buf: bytearray):
+        """Return a buffer to the pool for reuse (capped at 64 entries)."""
+        with self._buf_pool_lock:
+            if len(self._buf_pool) < 64:
+                self._buf_pool.append(buf)
+
     def _recv_exact(self, sock, n):
         """Receive exactly n bytes from a socket.
 
-        Uses recv_into with a pre-allocated buffer and memoryview
-        to avoid intermediate allocations (zero-copy receive).
+        Uses recv_into with a pooled buffer and memoryview
+        to minimize allocations on the hot path.
         """
-        buf = bytearray(n)
+        buf = self._acquire_buf(n)
         view = memoryview(buf)
         offset = 0
-        while offset < n:
-            nbytes = sock.recv_into(view[offset:], n - offset)
-            if nbytes == 0:
-                return None
-            offset += nbytes
-        return bytes(buf)
+        try:
+            while offset < n:
+                nbytes = sock.recv_into(view[offset:], n - offset)
+                if nbytes == 0:
+                    return None
+                offset += nbytes
+            return bytes(buf[:n])
+        finally:
+            self._release_buf(buf)
 
 
 # ─── Convenience function ─────────────────────────────────────────────────────
