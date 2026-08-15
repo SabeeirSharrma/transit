@@ -252,8 +252,8 @@ async function runBenchmark(benchmark, mode, config) {
         await httpPost(`http://127.0.0.1:${config.fastapi_port}${benchmark.fastapi_endpoint}`, body);
       } else if (mode === "transit") {
         const data = benchmark.data();
-        if (config.transitLang === "rust") {
-          // Rust bridge spreads args as native params — pass JSON string
+        if (config.transitLang === "rust" || config.transitLang === "c" || config.transitLang === "cpp") {
+          // Rust/C/C++ native addon bridge — pass JSON string directly
           await config.transitClient[benchmark.transit_fn](data);
         } else {
           // Python/Java bridge JSON.stringify the payload internally — pass object
@@ -292,7 +292,7 @@ async function runConcurrentBenchmark(benchmark, mode, config, concurrency) {
             await httpPost(`http://127.0.0.1:${config.fastapi_port}${benchmark.fastapi_endpoint}`, body);
           } else if (mode === "transit") {
             const data = benchmark.data();
-            if (config.transitLang === "rust") {
+            if (config.transitLang === "rust" || config.transitLang === "c" || config.transitLang === "cpp") {
               await config.transitClient[benchmark.transit_fn](data);
             } else {
               const args = JSON.parse(data);

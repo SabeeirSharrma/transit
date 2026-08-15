@@ -377,8 +377,13 @@ async function runBenchmark(benchmark, mode, config) {
         const body = JSON.parse(benchmark.data());
         await httpPost(`http://127.0.0.1:${config.fastapi_port}${benchmark.fastapi_endpoint}`, body);
       } else if (mode === "transit") {
-        const args = JSON.parse(benchmark.data());
-        await config.transitClient[benchmark.transit_fn](args);
+        if (config.transitLang === "c" || config.transitLang === "cpp") {
+          const data = benchmark.data();
+          await config.transitClient[benchmark.transit_fn](data);
+        } else {
+          const args = JSON.parse(benchmark.data());
+          await config.transitClient[benchmark.transit_fn](args);
+        }
       }
       const elapsed = performance.now() - start;
       if (i >= WARMUP) times.push(elapsed);
@@ -410,8 +415,13 @@ async function runConcurrentBenchmark(benchmark, mode, config, concurrency) {
             const body = JSON.parse(benchmark.data());
             await httpPost(`http://127.0.0.1:${config.fastapi_port}${benchmark.fastapi_endpoint}`, body);
           } else if (mode === "transit") {
-            const args = JSON.parse(benchmark.data());
-            await config.transitClient[benchmark.transit_fn](args);
+            if (config.transitLang === "c" || config.transitLang === "cpp") {
+              const data = benchmark.data();
+              await config.transitClient[benchmark.transit_fn](data);
+            } else {
+              const args = JSON.parse(benchmark.data());
+              await config.transitClient[benchmark.transit_fn](args);
+            }
           }
         } catch (e) {
           errors.push(e.message);
@@ -720,7 +730,7 @@ async function main() {
 
         // Rust (in-process native addon)
         process.stdout.write("  Transit/Rust       ... ");
-        transitResults.rust = await runBenchmark(benchmark, "transit", { transitClient: rs });
+        transitResults.rust = await runBenchmark(benchmark, "transit", { transitClient: rs, transitLang: "rust" });
         console.log(`${transitResults.rust.mean.toFixed(2)}ms avg, ${transitResults.rust.ops_per_sec.toFixed(1)} ops/s`);
 
         // Python (TCP bridge)
@@ -737,12 +747,12 @@ async function main() {
 
         // C (in-process native addon)
         process.stdout.write("  Transit/C          ... ");
-        transitResults.c = await runBenchmark(benchmark, "transit", { transitClient: cc });
+        transitResults.c = await runBenchmark(benchmark, "transit", { transitClient: cc, transitLang: "c" });
         console.log(`${transitResults.c.mean.toFixed(2)}ms avg, ${transitResults.c.ops_per_sec.toFixed(1)} ops/s`);
 
         // C++ (in-process native addon)
         process.stdout.write("  Transit/C++        ... ");
-        transitResults.cpp = await runBenchmark(benchmark, "transit", { transitClient: cpp });
+        transitResults.cpp = await runBenchmark(benchmark, "transit", { transitClient: cpp, transitLang: "cpp" });
         console.log(`${transitResults.cpp.mean.toFixed(2)}ms avg, ${transitResults.cpp.ops_per_sec.toFixed(1)} ops/s`);
 
         // Additional backends
@@ -802,26 +812,26 @@ async function main() {
         console.log(`${fastapiConc.mean.toFixed(2)}ms avg, ${fastapiConc.ops_per_sec.toFixed(1)} ops/s`);
 
         process.stdout.write("  Transit/Rust       ... ");
-        const rustConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: rs }, CONCURRENT);
+        const rustConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: rs, transitLang: "rust" }, CONCURRENT);
         console.log(`${rustConc.mean.toFixed(2)}ms avg, ${rustConc.ops_per_sec.toFixed(1)} ops/s`);
 
         process.stdout.write("  Transit/Python     ... ");
-        const pyConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: py }, CONCURRENT);
+        const pyConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: py, transitLang: "python" }, CONCURRENT);
         console.log(`${pyConc.mean.toFixed(2)}ms avg, ${pyConc.ops_per_sec.toFixed(1)} ops/s`);
 
         let javaConc = null;
         if (jv) {
           process.stdout.write("  Transit/Java       ... ");
-          javaConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: jv }, CONCURRENT);
+          javaConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: jv, transitLang: "java" }, CONCURRENT);
           console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
         }
 
         process.stdout.write("  Transit/C          ... ");
-        const cConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cc }, CONCURRENT);
+        const cConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cc, transitLang: "c" }, CONCURRENT);
         console.log(`${cConc.mean.toFixed(2)}ms avg, ${cConc.ops_per_sec.toFixed(1)} ops/s`);
 
         process.stdout.write("  Transit/C++        ... ");
-        const cppConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cpp }, CONCURRENT);
+        const cppConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cpp, transitLang: "cpp" }, CONCURRENT);
         console.log(`${cppConc.mean.toFixed(2)}ms avg, ${cppConc.ops_per_sec.toFixed(1)} ops/s`);
 
         // Additional concurrent backends
