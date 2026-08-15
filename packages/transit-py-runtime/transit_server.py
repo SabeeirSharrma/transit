@@ -376,10 +376,11 @@ class TransitServer:
             client.sendall(resp)
 
     def _acquire_buf(self, n: int) -> bytearray:
-        """Acquire a buffer from the pool, or allocate if pool is empty."""
+        """Acquire a buffer from the pool, or allocate if pool is empty or too small."""
         with self._buf_pool_lock:
-            if self._buf_pool:
-                return self._buf_pool.pop()
+            for i, buf in enumerate(self._buf_pool):
+                if len(buf) >= n:
+                    return self._buf_pool.pop(i)
         return bytearray(n)
 
     def _release_buf(self, buf: bytearray):

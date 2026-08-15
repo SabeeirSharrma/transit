@@ -108,7 +108,7 @@ Works the same way as the Python bridge — starts a Java process and communicat
 
 ### Rust, C, and C++ (In-Process)
 
-```
+```text
 JavaScript -> Loads .node file -> Calls Rust/C/C++ function directly -> Returns result
 ```
 

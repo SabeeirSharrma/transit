@@ -369,7 +369,15 @@ function compileWithCmakeJs(dir: string, lang: "c" | "cpp", verbose: boolean): {
     if (verbose) console.log(`[transit] Running: ${buildCmd} in ${dir}`);
     execSync(buildCmd, { cwd: dir, stdio: verbose ? "inherit" : "pipe" });
 
-    // cmake-js outputs to build/<name>.node
+    // cmake-js outputs to build/Release/<name>.node on Linux/macOS
+    const releaseDir = join(buildDir, "Release");
+    if (existsSync(releaseDir)) {
+      const nodeFiles = readdirSync(releaseDir).filter((f: string) => f.endsWith(".node"));
+      if (nodeFiles.length > 0) {
+        return { success: true };
+      }
+    }
+    // Also check build/ root for platforms where cmake-js outputs directly there
     const nodeFiles = readdirSync(buildDir).filter((f: string) => f.endsWith(".node"));
     if (nodeFiles.length > 0) {
       return { success: true };

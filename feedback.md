@@ -9,7 +9,7 @@
 
 Transit/Python uses a **persistent TCP process** model:
 
-```
+```text
 JS (Node.js)
   │
   ▼
@@ -36,7 +36,7 @@ The **bridge itself is already well-optimized**: binary protocol, Unix domain so
 
 ### Bottleneck 1: CPython Interpreter Overhead (Biggest Factor)
 
-The benchmarks show Transit/Python is **10–100x slower** than Transit/Rust and Transit/Java on compute-heavy tasks:
+The benchmarks show Transit/Python is **5–727x slower** than Transit/Rust and Transit/Java on compute-heavy tasks:
 
 | Operation | Transit/Python | Transit/Rust | Transit/Java |
 |---|---|---|---|
@@ -91,7 +91,7 @@ Or pass it through the Transit options:
 const py = transit.python("./python", { env: { TRANSIT_USE_ORJSON: "1" } })
 ```
 
-**Recommendation:** Make `orjson` the default if installed, falling back to stdlib `json`. Remove the need for the environment variable.
+**Recommendation:** Make `orjson` the default if installed, falling back to stdlib `json`. Keep the shim scoped to registered handler dispatch — do not replace `sys.modules["json"]` process-wide, as that affects all user code and third-party libraries.
 
 ---
 
@@ -141,6 +141,7 @@ except ImportError:
 
 class AsyncTransitServer:
     async def handle_client(self, reader, writer):
+        loop = asyncio.get_running_loop()
         while True:
             header = await reader.readexactly(HEADER_SIZE)
             # ... parse and dispatch
@@ -178,7 +179,7 @@ def matrix_multiply(args_json):
 ### 5. Use the Right Language (Transit's Core Value)
 
 **Impact:** 10–1000x
-**Effort:** Zero (just use a different bridge)
+**Effort:** Low if reusing an existing Rust/Java bridge function; higher if writing a new language port from scratch
 
 Transit's whole point is that you can call the right language for the job. For compute-heavy work:
 
@@ -208,7 +209,7 @@ Reserve `transit.python()` for what Python excels at:
 | 2 | `ProcessPoolExecutor` for calls | 2–8x concurrent | Small | GIL contention |
 | 3 | `asyncio` + `uvloop` rewrite | 2–4x I/O | Medium | Thread overhead |
 | 4 | C extensions in user code | 10–100x compute | Varies | CPython interpreter |
-| 5 | Use Rust/Java for compute | 10–1000x | Zero | Language choice |
+| 5 | Use Rust/Java for compute | 10–1000x | Low (reuse) / High (new port) | Language choice |
 
 ### What's Already Optimized (No Further Gains)
 

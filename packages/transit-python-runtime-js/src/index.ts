@@ -251,11 +251,6 @@ export class PythonProcessManager {
         // TCP_NODELAY only applies to TCP sockets
         if (!this.socketPath) {
           socket.setNoDelay(true);
-          // Increase OS socket buffers for better throughput on large payloads
-          try {
-            (socket as any).setRecvBufferSize(262144); // 256KB
-            (socket as any).setSendBufferSize(262144); // 256KB
-          } catch {}
         }
         // Enable TCP keepalive to detect dead connections at OS level
         socket.setKeepAlive(true, 5000);

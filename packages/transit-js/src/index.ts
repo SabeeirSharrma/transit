@@ -311,6 +311,8 @@ class RustDevBridge implements RuntimeBridge {
     const candidates = [
       join(this.addonPath, "transit-scanner.node"),
       join(this.addonPath, "index.node"),
+      join(this.addonPath, "build", "Release"),
+      join(this.addonPath, "build", "Debug"),
       join(this.addonPath, "target/release"),
       join(this.addonPath, "target/debug"),
     ];
@@ -337,7 +339,7 @@ class RustDevBridge implements RuntimeBridge {
 
     if (!addonPath) {
       throw new Error(
-        `${this.lang} addon not found. Run "cargo build --release" in ${this.addonPath} first.`
+        `${this.lang} addon not found in ${this.addonPath}. Build it with the configured native build command (e.g. "cargo build --release" for Rust, "npm run build" for C/C++).`
       );
     }
 

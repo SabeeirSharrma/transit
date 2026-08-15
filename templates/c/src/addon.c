@@ -5,11 +5,23 @@
 napi_value Add(napi_env env, napi_callback_info info) {
     size_t argc = 2;
     napi_value args[2];
-    napi_get_cb_info(env, info, &argc, args, NULL, NULL);
+    napi_status status = napi_get_cb_info(env, info, &argc, args, NULL, NULL);
+    if (status != napi_ok || argc < 2) {
+        napi_throw_type_error(env, NULL, "Expected two arguments");
+        return NULL;
+    }
 
     double a, b;
-    napi_get_value_double(env, args[0], &a);
-    napi_get_value_double(env, args[1], &b);
+    status = napi_get_value_double(env, args[0], &a);
+    if (status != napi_ok) {
+        napi_throw_type_error(env, NULL, "First argument must be a number");
+        return NULL;
+    }
+    status = napi_get_value_double(env, args[1], &b);
+    if (status != napi_ok) {
+        napi_throw_type_error(env, NULL, "Second argument must be a number");
+        return NULL;
+    }
 
     napi_value result;
     napi_create_double(env, a + b, &result);

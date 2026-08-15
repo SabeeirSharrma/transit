@@ -3,7 +3,7 @@
     {
       "target_name": "transit_addon",
       "sources": [
-        "src/**/*.c"
+        "src/addon.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
