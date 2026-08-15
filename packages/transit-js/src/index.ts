@@ -273,10 +273,12 @@ class RustDevBridge implements RuntimeBridge {
   private addonPath: string;
   private addon: any = null;
   private buildOverride?: BuildOverride;
+  private lang: string;
 
-  constructor(dir: string, buildOverride?: BuildOverride) {
+  constructor(dir: string, buildOverride?: BuildOverride, lang: string = "rust") {
     this.addonPath = resolve(dir);
     this.buildOverride = buildOverride;
+    this.lang = lang;
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -288,7 +290,7 @@ class RustDevBridge implements RuntimeBridge {
     const fn = this.addon[camelName] ?? this.addon[functionName];
     if (!fn) {
       throw new TransitError({
-        language: "rust",
+        language: this.lang,
         functionName,
         detail: `Function not found. Available: ${Object.keys(this.addon).join(", ")}`,
       });
@@ -297,7 +299,7 @@ class RustDevBridge implements RuntimeBridge {
       return await fn(...args);
     } catch (err) {
       throw new TransitError({
-        language: "rust",
+        language: this.lang,
         functionName,
         detail: (err as Error).message ?? String(err),
         raw: err,
@@ -335,7 +337,7 @@ class RustDevBridge implements RuntimeBridge {
 
     if (!addonPath) {
       throw new Error(
-        `Rust addon not found. Run "cargo build --release" in ${this.addonPath} first.`
+        `${this.lang} addon not found. Run "cargo build --release" in ${this.addonPath} first.`
       );
     }
 
@@ -689,7 +691,7 @@ class Transit {
     const key = `c:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new RustDevBridge(dir, this._config.build?.c);
+    const bridge = new RustDevBridge(dir, this._config.build?.c, "c");
     this.bridges.push(bridge);
     this.registerShutdown();
     const manifest = scanDirectorySync(dir);
@@ -709,7 +711,7 @@ class Transit {
     const key = `cpp:${resolve(dir)}`;
     if (this.handles.has(key)) return this.handles.get(key)!;
 
-    const bridge = new RustDevBridge(dir, this._config.build?.cpp);
+    const bridge = new RustDevBridge(dir, this._config.build?.cpp, "cpp");
     this.bridges.push(bridge);
     this.registerShutdown();
     const manifest = scanDirectorySync(dir);
@@ -720,6 +722,26 @@ class Transit {
     if (manifest.entries.length > 0) {
       const fns = manifest.entries.map((e) => e.functionName).join(", ");
       console.error(`[transit] C++: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
+    return handle;
+  }
+
+  holycc(dir: string): FunctionProxy {
+    const key = `holycc:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge = new RustDevBridge(dir, this._config.build?.c, "holycc");
+    this.bridges.push(bridge);
+    this.registerShutdown();
+    const manifest = scanDirectorySync(dir);
+    this.mergeConfigExports(manifest, dir);
+    const handle = createLanguageHandle("holycc", manifest, bridge);
+    this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] HolyC: discovered ${manifest.entries.length} functions: ${fns}`);
     }
 
     return handle;
