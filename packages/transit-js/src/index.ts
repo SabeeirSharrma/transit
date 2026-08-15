@@ -685,6 +685,46 @@ class Transit {
     return handle;
   }
 
+  c(dir: string): FunctionProxy {
+    const key = `c:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge = new RustDevBridge(dir, this._config.build?.c);
+    this.bridges.push(bridge);
+    this.registerShutdown();
+    const manifest = scanDirectorySync(dir);
+    this.mergeConfigExports(manifest, dir);
+    const handle = createLanguageHandle("c", manifest, bridge);
+    this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] C: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
+    return handle;
+  }
+
+  cpp(dir: string): FunctionProxy {
+    const key = `cpp:${resolve(dir)}`;
+    if (this.handles.has(key)) return this.handles.get(key)!;
+
+    const bridge = new RustDevBridge(dir, this._config.build?.cpp);
+    this.bridges.push(bridge);
+    this.registerShutdown();
+    const manifest = scanDirectorySync(dir);
+    this.mergeConfigExports(manifest, dir);
+    const handle = createLanguageHandle("cpp", manifest, bridge);
+    this.handles.set(key, handle);
+
+    if (manifest.entries.length > 0) {
+      const fns = manifest.entries.map((e) => e.functionName).join(", ");
+      console.error(`[transit] C++: discovered ${manifest.entries.length} functions: ${fns}`);
+    }
+
+    return handle;
+  }
+
   info(): void {
     for (const [key, handle] of this.handles) {
       const [lang, dir] = key.split(":");
