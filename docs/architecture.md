@@ -47,7 +47,7 @@ Transit has several parts that work together:
 The scanner is a tool written in Rust that reads your source files and finds functions. It uses a technology called "tree-sitter" to understand the structure of your code.
 
 **What it does:**
-- Reads your `.rs`, `.py`, `.java`, `.js`, `.ts` files
+- Reads your `.rs`, `.py`, `.java`, `.c`, `.cpp`, `.js`, `.ts` files
 - Finds functions that are public
 - Detects special comments like `// transit:file`
 - Produces a list of discovered functions (called a "manifest")
@@ -56,28 +56,29 @@ The scanner is a tool written in Rust that reads your source files and finds fun
 
 ### 2. The JavaScript API (transit-js)
 
-This is the code you interact with. It provides the `transit.rust()`, `transit.java()`, and `transit.python()` functions.
+This is the code you interact with. It provides the `transit.rust()`, `transit.java()`, `transit.python()`, `transit.c()`, and `transit.cpp()` functions.
 
 **What it does:**
-- Creates language handles (the `rs`, `jv`, `py` objects)
-- Manages communication with Rust, Java, and Python
+- Creates language handles (the `rs`, `jv`, `py`, `c`, `cpp` objects)
+- Manages communication with Rust, Java, Python, C, and C++
 - Handles errors and timeouts
 - Caches language handles so you do not create duplicates
 
 ### 3. The Rust Bridge (RustDevBridge)
 
-When you call a Rust function, Transit loads a compiled Rust file (called a "native addon") directly into your JavaScript process.
+When you call a Rust function, Transit loads a compiled Rust file (called a "native addon") directly into your JavaScript process. The same bridge is shared for C and C++ functions — `RustDevBridge` detects the language and loads the appropriate compiled addon.
 
 **How it works:**
-- Your Rust code is compiled into a `.node` or `.so` file
+- Your Rust/C/C++ code is compiled into a `.node` or `.so` file
 - Transit loads this file using Node.js's native addon system
-- Function calls go directly to the Rust code — no network, no serialization
+- Function calls go directly to the native code — no network, no serialization
 - This is very fast (nanosecond-level latency)
 
 **What you need:**
-- Rust code annotated with `#[napi]`
-- A `Cargo.toml` with `crate-type = ["cdylib"]`
-- The compiled file in your project directory
+- **Rust:** `#[napi]` annotated `pub fn` functions with `crate-type = ["cdylib"]` in `Cargo.toml`
+- **C:** Functions declared via `#include <transit_c_glue.gen.h>` (generated from your function signatures)
+- **C++:** Functions declared via `#include <transit_cpp_glue.gen.h>` (generated from your function signatures)
+- The compiled `.node` file must be in your project directory
 
 ### 4. The Python Bridge (PythonDevBridge)
 
@@ -105,13 +106,13 @@ Works the same way as the Python bridge — starts a Java process and communicat
 
 ## How Communication Works
 
-### Rust (In-Process)
+### Rust, C, and C++ (In-Process)
 
 ```
-JavaScript -> Loads .node file -> Calls Rust function directly -> Returns result
+JavaScript -> Loads .node file -> Calls Rust/C/C++ function directly -> Returns result
 ```
 
-No network involved. The Rust code runs inside your JavaScript process. This is the fastest option.
+No network involved. The native code runs inside your JavaScript process. This is the fastest option.
 
 ### Python and Java (TCP)
 
@@ -147,6 +148,8 @@ For Python and Java, if the process crashes, Transit automatically restarts it (
 | Language pair | Latency | Why |
 |---------------|---------|-----|
 | JavaScript <-> Rust | ~nanoseconds | Runs in the same process |
+| JavaScript <-> C | ~nanoseconds | Runs in the same process |
+| JavaScript <-> C++ | ~nanoseconds | Runs in the same process |
 | JavaScript <-> Python | ~milliseconds | Network communication |
 | JavaScript <-> Java | ~milliseconds | Network communication |
 
@@ -161,8 +164,8 @@ The first call to Python or Java is slower because it includes process startup t
 
 ## What Happens When You Add a New Function
 
-1. You write a new `pub fn` in Rust (or `def` in Python, or `public` method in Java)
-2. You recompile if needed (Rust: `cargo build --release`, Java: `javac`)
+1. You write a new `pub fn` in Rust (or `def` in Python, `public` method in Java, or a C/C++ function with the right signature)
+2. You recompile if needed (Rust: `cargo build --release`, C/C++: `npm run build`, Java: `javac`)
 3. The next time Transit scans your code, it finds the new function
 4. You can call it immediately — no restart needed
 
