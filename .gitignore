@@ -2,6 +2,10 @@ fastapi/.venv/
 transit/rust/target/
 transit/rust/index.node
 transit/java/build/
+transit/c/build/
+transit/c/index.node
+transit/cpp/build/
+transit/cpp/index.node
 node_modules/
 results/*.json
 __pycache__/

@@ -426,9 +426,39 @@ async function main() {
     fs.copyFileSync(rustTarget, rustDest);
   }
 
+  // Build C native addon
+  console.log("  Building C native addon...");
+  const cProc = spawn("npx", ["node-gyp", "rebuild"], {
+    cwd: resolve(__dirname, "./transit/c"),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await new Promise((resolve) => cProc.on("close", resolve));
+  const cTarget = resolve(__dirname, "./transit/c/build/Release/chat_benchmark_c.node");
+  const cDest = resolve(__dirname, "./transit/c/index.node");
+  if (fs.existsSync(cTarget)) {
+    fs.copyFileSync(cTarget, cDest);
+    console.log("  ✓ C addon built");
+  }
+
+  // Build C++ native addon
+  console.log("  Building C++ native addon...");
+  const cppProc = spawn("npx", ["node-gyp", "rebuild"], {
+    cwd: resolve(__dirname, "./transit/cpp"),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await new Promise((resolve) => cppProc.on("close", resolve));
+  const cppTarget = resolve(__dirname, "./transit/cpp/build/Release/chat_benchmark_cpp.node");
+  const cppDest = resolve(__dirname, "./transit/cpp/index.node");
+  if (fs.existsSync(cppTarget)) {
+    fs.copyFileSync(cppTarget, cppDest);
+    console.log("  ✓ C++ addon built");
+  }
+
   // Start Transit
   const rs = transit.rust(resolve(__dirname, "./transit/rust"));
   const py = transit.python(resolve(__dirname, "./transit/python"), { env: { TRANSIT_USE_ORJSON: "1" } });
+  const cc = transit.c(resolve(__dirname, "./transit/c"));
+  const cpp = transit.cpp(resolve(__dirname, "./transit/cpp"));
 
   // Start Java
   console.log("  Compiling Java...");
@@ -589,6 +619,14 @@ async function main() {
           console.log(`${transitResults.java.mean.toFixed(2)}ms avg, ${transitResults.java.ops_per_sec.toFixed(1)} ops/s`);
         }
 
+        process.stdout.write("  Transit/C          ... ");
+        transitResults.c = await runBenchmark(benchmark, "transit", { transitClient: cc, transitLang: "c" });
+        console.log(`${transitResults.c.mean.toFixed(2)}ms avg, ${transitResults.c.ops_per_sec.toFixed(1)} ops/s`);
+
+        process.stdout.write("  Transit/C++        ... ");
+        transitResults.cpp = await runBenchmark(benchmark, "transit", { transitClient: cpp, transitLang: "cpp" });
+        console.log(`${transitResults.cpp.mean.toFixed(2)}ms avg, ${transitResults.cpp.ops_per_sec.toFixed(1)} ops/s`);
+
         // Additional backends
         const additionalResults = {};
 
@@ -675,6 +713,14 @@ async function main() {
           console.log(`${javaConc.mean.toFixed(2)}ms avg, ${javaConc.ops_per_sec.toFixed(1)} ops/s`);
         }
 
+        process.stdout.write("  Transit/C          ... ");
+        const cConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cc, transitLang: "c" }, CONCURRENT);
+        console.log(`${cConc.mean.toFixed(2)}ms avg, ${cConc.ops_per_sec.toFixed(1)} ops/s`);
+
+        process.stdout.write("  Transit/C++        ... ");
+        const cppConc = await runConcurrentBenchmark(benchmark, "transit", { transitClient: cpp, transitLang: "cpp" }, CONCURRENT);
+        console.log(`${cppConc.mean.toFixed(2)}ms avg, ${cppConc.ops_per_sec.toFixed(1)} ops/s`);
+
         // Additional backends concurrent
         const additionalConc = {};
 
@@ -721,6 +767,8 @@ async function main() {
               rust: rustConc,
               python: pyConc,
               java: jv ? javaConc : null,
+              c: cConc,
+              cpp: cppConc,
             },
             additional: additionalConc,
           };
@@ -791,12 +839,12 @@ function printSummary(results) {
     out("─── Serial (single request, 100 iterations) ──────────────────────────────────");
     out("");
 
-    const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java", "gRPC", "Thrift", "Unix Sock", "Subprocess", "ZeroMQ", "Redis", "Winner"];
+    const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java", "Transit/C", "Transit/C++", "gRPC", "Thrift", "Unix Sock", "Subprocess", "ZeroMQ", "Redis", "Winner"];
     const rows = [];
 
     for (const [key, data] of Object.entries(results.benchmarks)) {
       if (data.error) {
-        rows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR"]);
+        rows.push([data.name, "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR", "ERROR"]);
         continue;
       }
 
@@ -804,6 +852,8 @@ function printSummary(results) {
       if (data.transit?.rust?.mean) times["Transit/Rust"] = data.transit.rust.mean;
       if (data.transit?.python?.mean) times["Transit/Python"] = data.transit.python.mean;
       if (data.transit?.java?.mean) times["Transit/Java"] = data.transit.java.mean;
+      if (data.transit?.c?.mean) times["Transit/C"] = data.transit.c.mean;
+      if (data.transit?.cpp?.mean) times["Transit/C++"] = data.transit.cpp.mean;
       if (data.additional?.grpc?.mean) times["gRPC"] = data.additional.grpc.mean;
       if (data.additional?.thrift?.mean) times["Thrift"] = data.additional.thrift.mean;
       if (data.additional?.unixSocket?.mean) times["Unix Socket"] = data.additional.unixSocket.mean;
@@ -824,6 +874,8 @@ function printSummary(results) {
         data.transit?.rust?.mean ? `${data.transit.rust.mean.toFixed(2)}ms` : "-",
         data.transit?.python?.mean ? `${data.transit.python.mean.toFixed(2)}ms` : "-",
         data.transit?.java?.mean ? `${data.transit.java.mean.toFixed(2)}ms` : "N/A",
+        data.transit?.c?.mean ? `${data.transit.c.mean.toFixed(2)}ms` : "-",
+        data.transit?.cpp?.mean ? `${data.transit.cpp.mean.toFixed(2)}ms` : "-",
         data.additional?.grpc?.mean ? `${data.additional.grpc.mean.toFixed(2)}ms` : "N/A",
         data.additional?.thrift?.mean ? `${data.additional.thrift.mean.toFixed(2)}ms` : "N/A",
         data.additional?.unixSocket?.mean ? `${data.additional.unixSocket.mean.toFixed(2)}ms` : "N/A",
@@ -850,7 +902,7 @@ function printSummary(results) {
     out(`─── Concurrent (${results.concurrency} parallel requests) ────────────────────────────`);
     out("");
 
-    const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java", "gRPC", "Thrift", "Unix Sock", "Subprocess", "ZeroMQ", "Redis", "Winner"];
+    const headers = ["Operation", "FastAPI", "Transit/Rust", "Transit/Python", "Transit/Java", "Transit/C", "Transit/C++", "gRPC", "Thrift", "Unix Sock", "Subprocess", "ZeroMQ", "Redis", "Winner"];
     const rows = [];
 
     for (const [key, data] of Object.entries(results.benchmarks)) {
@@ -860,6 +912,8 @@ function printSummary(results) {
       if (data.concurrent.transit?.rust?.mean) times["Transit/Rust"] = data.concurrent.transit.rust.mean;
       if (data.concurrent.transit?.python?.mean) times["Transit/Python"] = data.concurrent.transit.python.mean;
       if (data.concurrent.transit?.java?.mean) times["Transit/Java"] = data.concurrent.transit.java.mean;
+      if (data.concurrent.transit?.c?.mean) times["Transit/C"] = data.concurrent.transit.c.mean;
+      if (data.concurrent.transit?.cpp?.mean) times["Transit/C++"] = data.concurrent.transit.cpp.mean;
       if (data.concurrent.additional?.grpc?.mean) times["gRPC"] = data.concurrent.additional.grpc.mean;
       if (data.concurrent.additional?.thrift?.mean) times["Thrift"] = data.concurrent.additional.thrift.mean;
       if (data.concurrent.additional?.unixSocket?.mean) times["Unix Socket"] = data.concurrent.additional.unixSocket.mean;
@@ -880,6 +934,8 @@ function printSummary(results) {
         data.concurrent.transit?.rust?.mean ? `${data.concurrent.transit.rust.mean.toFixed(2)}ms` : "-",
         data.concurrent.transit?.python?.mean ? `${data.concurrent.transit.python.mean.toFixed(2)}ms` : "-",
         data.concurrent.transit?.java?.mean ? `${data.concurrent.transit.java.mean.toFixed(2)}ms` : "N/A",
+        data.concurrent.transit?.c?.mean ? `${data.concurrent.transit.c.mean.toFixed(2)}ms` : "-",
+        data.concurrent.transit?.cpp?.mean ? `${data.concurrent.transit.cpp.mean.toFixed(2)}ms` : "-",
         data.concurrent.additional?.grpc?.mean ? `${data.concurrent.additional.grpc.mean.toFixed(2)}ms` : "N/A",
         data.concurrent.additional?.thrift?.mean ? `${data.concurrent.additional.thrift.mean.toFixed(2)}ms` : "N/A",
         data.concurrent.additional?.unixSocket?.mean ? `${data.concurrent.additional.unixSocket.mean.toFixed(2)}ms` : "N/A",
@@ -932,12 +988,12 @@ function generateMarkdown(results) {
   if (results.mode === "both" || results.mode === "serial") {
     md.push(`## Serial (single request, ${results.iterations} iterations)`);
     md.push(``);
-    md.push(`| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |`);
-    md.push(`|-----------|---------|--------------|----------------|--------------|------|--------|-----------|------------|--------|-------|--------|`);
+    md.push(`| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Transit/C | Transit/C++ | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |`);
+    md.push(`|-----------|---------|--------------|----------------|--------------|-----------|-------------|------|--------|-----------|------------|--------|-------|--------|`);
 
     for (const [key, data] of Object.entries(results.benchmarks)) {
       if (data.error) {
-        md.push(`| ${data.name} | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR |`);
+        md.push(`| ${data.name} | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR |`);
         continue;
       }
 
@@ -945,6 +1001,8 @@ function generateMarkdown(results) {
       if (data.transit?.rust?.mean) times["Transit/Rust"] = data.transit.rust.mean;
       if (data.transit?.python?.mean) times["Transit/Python"] = data.transit.python.mean;
       if (data.transit?.java?.mean) times["Transit/Java"] = data.transit.java.mean;
+      if (data.transit?.c?.mean) times["Transit/C"] = data.transit.c.mean;
+      if (data.transit?.cpp?.mean) times["Transit/C++"] = data.transit.cpp.mean;
       if (data.additional?.grpc?.mean) times["gRPC"] = data.additional.grpc.mean;
       if (data.additional?.thrift?.mean) times["Thrift"] = data.additional.thrift.mean;
       if (data.additional?.unixSocket?.mean) times["Unix Socket"] = data.additional.unixSocket.mean;
@@ -959,7 +1017,7 @@ function generateMarkdown(results) {
         ? `${(Math.min(...Object.values(times).filter(t => t !== fastapiTime)) / fastapiTime).toFixed(1)}x slower`
         : `${(fastapiTime / fastest).toFixed(1)}x faster`;
 
-      md.push(`| ${data.name} | ${data.fastapi?.mean?.toFixed(2) || "-"}ms | ${data.transit?.rust?.mean?.toFixed(2) || "-"}ms | ${data.transit?.python?.mean?.toFixed(2) || "-"}ms | ${data.transit?.java?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.grpc?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.thrift?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.unixSocket?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.subprocess?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.zeromq?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.redis?.mean?.toFixed(2) || "N/A"}ms | **${winner}** (${speedup}) |`);
+      md.push(`| ${data.name} | ${data.fastapi?.mean?.toFixed(2) || "-"}ms | ${data.transit?.rust?.mean?.toFixed(2) || "-"}ms | ${data.transit?.python?.mean?.toFixed(2) || "-"}ms | ${data.transit?.java?.mean?.toFixed(2) || "N/A"}ms | ${data.transit?.c?.mean?.toFixed(2) || "-"}ms | ${data.transit?.cpp?.mean?.toFixed(2) || "-"}ms | ${data.additional?.grpc?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.thrift?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.unixSocket?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.subprocess?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.zeromq?.mean?.toFixed(2) || "N/A"}ms | ${data.additional?.redis?.mean?.toFixed(2) || "N/A"}ms | **${winner}** (${speedup}) |`);
     }
     md.push(``);
   }
@@ -968,8 +1026,8 @@ function generateMarkdown(results) {
   if (results.mode === "both" || results.mode === "concurrent") {
     md.push(`## Concurrent (${results.concurrency} parallel requests)`);
     md.push(``);
-    md.push(`| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |`);
-    md.push(`|-----------|---------|--------------|----------------|--------------|------|--------|-----------|------------|--------|-------|--------|`);
+    md.push(`| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | Transit/C | Transit/C++ | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |`);
+    md.push(`|-----------|---------|--------------|----------------|--------------|-----------|-------------|------|--------|-----------|------------|--------|-------|--------|`);
 
     for (const [key, data] of Object.entries(results.benchmarks)) {
       if (!data.concurrent) continue;
@@ -978,6 +1036,8 @@ function generateMarkdown(results) {
       if (data.concurrent.transit?.rust?.mean) times["Transit/Rust"] = data.concurrent.transit.rust.mean;
       if (data.concurrent.transit?.python?.mean) times["Transit/Python"] = data.concurrent.transit.python.mean;
       if (data.concurrent.transit?.java?.mean) times["Transit/Java"] = data.concurrent.transit.java.mean;
+      if (data.concurrent.transit?.c?.mean) times["Transit/C"] = data.concurrent.transit.c.mean;
+      if (data.concurrent.transit?.cpp?.mean) times["Transit/C++"] = data.concurrent.transit.cpp.mean;
       if (data.concurrent.additional?.grpc?.mean) times["gRPC"] = data.concurrent.additional.grpc.mean;
       if (data.concurrent.additional?.thrift?.mean) times["Thrift"] = data.concurrent.additional.thrift.mean;
       if (data.concurrent.additional?.unixSocket?.mean) times["Unix Socket"] = data.concurrent.additional.unixSocket.mean;
@@ -992,7 +1052,7 @@ function generateMarkdown(results) {
         ? `${(Math.min(...Object.values(times).filter(t => t !== fastapiTime)) / fastapiTime).toFixed(1)}x slower`
         : `${(fastapiTime / fastest).toFixed(1)}x faster`;
 
-      md.push(`| ${data.name} | ${data.concurrent.fastapi?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.rust?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.python?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.java?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.grpc?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.thrift?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.unixSocket?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.subprocess?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.zeromq?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.redis?.mean?.toFixed(2) || "N/A"}ms | **${winner}** (${speedup}) |`);
+      md.push(`| ${data.name} | ${data.concurrent.fastapi?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.rust?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.python?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.java?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.transit?.c?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.transit?.cpp?.mean?.toFixed(2) || "-"}ms | ${data.concurrent.additional?.grpc?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.thrift?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.unixSocket?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.subprocess?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.zeromq?.mean?.toFixed(2) || "N/A"}ms | ${data.concurrent.additional?.redis?.mean?.toFixed(2) || "N/A"}ms | **${winner}** (${speedup}) |`);
     }
     md.push(``);
   }
@@ -1005,6 +1065,8 @@ function generateMarkdown(results) {
   md.push(`| **Transit/Rust** | In-process native addon | Zero-copy | Direct function call |`);
   md.push(`| **Transit/Python** | TCP | Binary | Persistent bridge |`);
   md.push(`| **Transit/Java** | TCP | Binary | Persistent bridge |`);
+  md.push(`| **Transit/C** | In-process native addon | Zero-copy | Direct function call |`);
+  md.push(`| **Transit/C++** | In-process native addon | Zero-copy | Direct function call |`);
   md.push(`| **FastAPI** | HTTP/1.1 | JSON | HTTP request/response |`);
   md.push(`| **gRPC** | HTTP/2 | Protobuf | Persistent channel |`);
   md.push(`| **Thrift** | TCP | Binary | One connection per call |`);
