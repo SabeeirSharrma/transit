@@ -28,6 +28,7 @@ const pythonResult = await py.analyzeData(javaResult)
 Below are the results of an automated benchmark test comparing Transit against FastAPI, gRPC, Thrift, Unix Socket, Subprocess, ZeroMQ, Redis Pub/Sub, and PyO3.
 These benchmarks check **Operations performed per second**, **Speed of output** and **Correctness of output (To prevent inflated/unfair numbers)**.
 
+**Results may vary depending on hardware and setup**
 If you would like to benchmark on your own hardware, you can switch to the [Benchmark Branch](https://github.com/sabeeirsharrma/transit/tree/benchmark/)
 
 **Performed on:**
@@ -37,50 +38,75 @@ If you would like to benchmark on your own hardware, you can switch to the [Benc
 - GPU1: AMD Radeon Vega Series / Radeon Vega Mobile Series [Integrated]
 - RAM: 32GB DDR4 @ 3200MHz [SODIMM]
 
+**Expected:**
+
+- **Python benches slow due to serialization and slow processing (typical for python)**
+- **Redis gives no result due to server errors/inavailability**
+- **Benchmarks differ on custom scripts due to missing output correctness validation**
+
 ### Compute Benchmarks
 
-#### Serial Results (single request, 100 iterations)
+#### Serial (single request, 100 iterations)
 
-| Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ETL Pipeline** | 2.06ms | 0.29ms | 0.40ms | 2.47ms | 2.37ms | 1.89ms | 2.10ms | 0.61ms | **Transit/Rust** (7.2x faster) |
-| **Text Analysis** | 15.78ms | 0.71ms | 0.41ms | 14.30ms | 26.62ms | 11.86ms | 12.16ms | 2.52ms | **Transit/Java** (38.1x faster) |
-| **Matrix Multiply** | 28.85ms | 1.19ms | 1.24ms | 20.18ms | 54.59ms | 18.27ms | 18.28ms | 3.80ms | **Transit/Rust** (24.2x faster) |
-| **Matrix Determinant** | 22.72ms | 0.08ms | 0.11ms | 27.36ms | 37.44ms | 25.01ms | 26.19ms | 2.06ms | **Transit/Rust** (283.8x faster) |
-| **Graph Processing** | 10.55ms | 0.37ms | 0.51ms | 6.53ms | 13.36ms | 6.03ms | 5.56ms | 2.17ms | **Transit/Rust** (28.4x faster) |
-| **Fibonacci Memo** | 1.14ms | 0.05ms | 0.08ms | 1.00ms | 0.24ms | 0.09ms | 0.55ms | 0.09ms | **Transit/Rust** (22.7x faster) |
-| **SHA-256 Hashing** | 5.20ms | 0.06ms | 0.16ms | 5.67ms | 9.19ms | 4.89ms | 5.17ms | 0.69ms | **Transit/Rust** (93.8x faster) |
+| Operation | FastAPI (ms) | FastAPI (ops/s) | Transit/Rust (ms) | Transit/Rust (ops/s) | Transit/Python (ms) | Transit/Python (ops/s) | Transit/Java (ms) | Transit/Java (ops/s) | gRPC (ms) | gRPC (ops/s) | Thrift (ms) | Thrift (ops/s) | Unix Socket (ms) | Unix Socket (ops/s) | Subprocess (ms) | Subprocess (ops/s) | ZeroMQ (ms) | ZeroMQ (ops/s) | Redis (ms) | Redis (ops/s) | PyO3 (ms) | PyO3 (ops/s) | Winner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ETL Pipeline (1000 rows) | 1.92 | 521.7 | 0.29 | 3390.7 | 1.86 | 537.8 | 0.34 | 2917.3 | 2.99 | 334.9 | 2.31 | 433.4 | 1.62 | 616.6 | 0.85 | 1180.5 | 1.26 | 794.5 | N/A | N/A | 0.67 | 1492.0 | **Transit/Rust** (6.5x faster) |
+| Text Analysis (5000 words) | 16.15 | 61.9 | 0.70 | 1424.6 | 14.26 | 70.1 | 0.57 | 1755.6 | 13.37 | 74.8 | 28.02 | 35.7 | 15.25 | 65.6 | 11.54 | 86.6 | 11.57 | 86.5 | N/A | N/A | 2.54 | 394.4 | **Transit/Java** (28.4x faster) |
+| Matrix Multiply (50×50) | 27.51 | 36.4 | 0.98 | 1020.9 | 17.63 | 56.7 | 1.02 | 980.4 | 19.12 | 52.3 | 48.96 | 20.4 | 19.04 | 52.5 | 17.05 | 58.7 | 17.42 | 57.4 | N/A | N/A | 4.69 | 213.3 | **Transit/Rust** (28.1x faster) |
+| Matrix Determinant (8×8) | 22.20 | 45.0 | 0.09 | 11535.1 | 21.81 | 45.9 | 0.03 | 37828.4 | 26.97 | 37.1 | 33.04 | 30.3 | 33.06 | 30.3 | 25.48 | 39.3 | 25.65 | 39.0 | N/A | N/A | 2.00 | 500.8 | **Transit/Java** (840.0x faster) |
+| Graph Processing (500 nodes) | 10.24 | 97.7 | 0.24 | 4213.6 | 6.81 | 146.8 | 0.35 | 2842.7 | 6.79 | 147.2 | 17.02 | 58.8 | 9.89 | 101.1 | 4.84 | 206.4 | 5.61 | 178.2 | N/A | N/A | 1.95 | 512.8 | **Transit/Rust** (43.1x faster) |
+| Fibonacci Memo (n=38) | 1.14 | 877.3 | 0.04 | 28030.8 | 0.19 | 5278.0 | 0.01 | 67279.5 | 1.63 | 612.9 | 0.32 | 3092.3 | 0.26 | 3916.9 | 0.08 | 12140.9 | 0.19 | 5310.8 | N/A | N/A | 0.03 | 29726.5 | **Transit/Java** (76.7x faster) |
+| SHA-256 Hashing (10K rounds) | 5.00 | 200.0 | 0.02 | 52708.6 | 4.28 | 233.5 | 0.01 | 76779.6 | 5.66 | 176.7 | 11.69 | 85.6 | 10.65 | 93.9 | 4.34 | 230.7 | 4.50 | 222.0 | N/A | N/A | 0.97 | 1030.2 | **Transit/Java** (383.8x faster) |
 
-#### Concurrent Results (10 parallel requests)
+#### Concurrent (undefined parallel requests)
 
-| Operation | FastAPI | Transit/Rust | Transit/Java | gRPC | Thrift | ZeroMQ | Redis | PyO3 | Winner |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **ETL Pipeline** | 15.35ms | 1.44ms | 1.89ms | 13.16ms | 6.55ms | 1.26ms | 3.65ms | 1.08ms | **PyO3** (14.2x faster) |
-| **Text Analysis** | 131.42ms | 3.61ms | 3.99ms | 177.89ms | 174.62ms | 6.38ms | 61.35ms | 9.90ms | **Transit/Rust** (36.4x faster) |
-| **Matrix Multiply** | 227.63ms | 5.83ms | 7.24ms | 222.78ms | 239.70ms | 10.55ms | 80.37ms | 17.94ms | **Transit/Rust** (39.0x faster) |
-| **Matrix Determinant** | 200.48ms | 0.54ms | 1.91ms | 369.21ms | 400.01ms | 8.91ms | 157.44ms | 10.77ms | **Transit/Rust** (374.5x faster) |
-| **Graph Processing** | 91.94ms | 2.07ms | 3.32ms | 63.66ms | 56.09ms | 2.45ms | 30.37ms | 7.19ms | **Transit/Rust** (44.3x faster) |
-| **Fibonacci Memo** | 4.30ms | 0.11ms | 1.77ms | 3.40ms | 1.50ms | 0.09ms | 1.01ms | 0.15ms | **ZeroMQ** (46.6x faster) |
-| **SHA-256 Hashing** | 46.42ms | 0.26ms | 1.86ms | 54.91ms | 46.18ms | 1.71ms | 28.53ms | 4.68ms | **Transit/Rust** (180.1x faster) |
+| Operation | FastAPI (ms) | FastAPI (ops/s) | Transit/Rust (ms) | Transit/Rust (ops/s) | Transit/Python (ms) | Transit/Python (ops/s) | Transit/Java (ms) | Transit/Java (ops/s) | gRPC (ms) | gRPC (ops/s) | Thrift (ms) | Thrift (ops/s) | Unix Socket (ms) | Unix Socket (ops/s) | Subprocess (ms) | Subprocess (ops/s) | ZeroMQ (ms) | ZeroMQ (ops/s) | Redis (ms) | Redis (ops/s) | PyO3 (ms) | PyO3 (ops/s) | Winner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ETL Pipeline (1000 rows) | 12.08 | 82.8 | 1.32 | 758.4 | 4.88 | 204.8 | 0.29 | 3462.7 | 13.85 | 72.2 | 7.82 | 127.9 | 5.58 | 179.1 | 2.07 | 482.9 | 1.47 | 680.0 | N/A | N/A | 1.81 | 551.6 | **Transit/Java** (41.8x faster) |
+| Text Analysis (5000 words) | 123.25 | 8.1 | 3.39 | 294.6 | 265.14 | 3.8 | 0.54 | 1846.5 | 203.51 | 4.9 | 224.69 | 4.5 | 190.27 | 5.3 | 55.41 | 18.0 | 6.24 | 160.4 | N/A | N/A | 8.25 | 121.2 | **Transit/Java** (227.6x faster) |
+| Matrix Multiply (50×50) | 224.40 | 4.5 | 5.75 | 174.1 | 233.88 | 4.3 | 0.94 | 1063.1 | 301.93 | 3.3 | 276.69 | 3.6 | 249.19 | 4.0 | 70.60 | 14.2 | 9.89 | 101.2 | N/A | N/A | 17.82 | 56.1 | **Transit/Java** (238.6x faster) |
+| Matrix Determinant (8×8) | 193.16 | 5.2 | 0.49 | 2022.5 | 442.52 | 2.3 | 0.04 | 23147.6 | 494.71 | 2.0 | 519.93 | 1.9 | 411.62 | 2.4 | 139.03 | 7.2 | 8.28 | 120.8 | N/A | N/A | 9.99 | 100.1 | **Transit/Java** (4471.3x faster) |
+| Graph Processing (500 nodes) | 80.25 | 12.5 | 2.16 | 463.6 | 115.21 | 8.7 | 0.37 | 2667.9 | 85.98 | 11.6 | 80.49 | 12.4 | 39.43 | 25.4 | 21.37 | 46.8 | 3.30 | 302.8 | N/A | N/A | 5.32 | 188.0 | **Transit/Java** (214.1x faster) |
+| Fibonacci Memo (n=38) | 3.66 | 273.1 | 0.10 | 10400.0 | 0.86 | 1166.6 | 0.01 | 122039.9 | 4.34 | 230.3 | 1.16 | 860.5 | 0.65 | 1538.3 | 0.18 | 5469.2 | 0.09 | 11258.4 | N/A | N/A | 0.14 | 7290.8 | **Transit/Java** (446.9x faster) |
+| SHA-256 Hashing (10K rounds) | 40.34 | 24.8 | 0.26 | 3862.8 | 81.12 | 12.3 | 0.02 | 50664.5 | 84.08 | 11.9 | 84.15 | 11.9 | 30.57 | 32.7 | 22.99 | 43.5 | 1.79 | 560.2 | N/A | N/A | 4.38 | 228.5 | **Transit/Java** (2043.6x faster) |
 
 ### Chat Server Benchmark
 
-#### Chat Server Results (Serial - single request, 100 iterations)
+> Generated: 2026-08-01T08:19:02.997Z | Mode: Serial & Concurrent | Iterations: 100 | Warmup: 10
+
+#### Serial (single request, 100 iterations)
 
 | Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
 | ----------- | --------- | -------------- | ---------------- | -------------- | ------ | -------- | ----------- | ------------ | -------- | ------- | -------- |
-| Message Send Pipeline (auth+mod+route+persist) | 1.29ms | 0.01ms | 0.17ms | 0.26ms | 0.17ms | 0.13ms | 0.28ms | 0.05ms | 0.11ms | 0.57ms | **Transit/Rust** (117.3x faster) |
-| Fan-out Delivery (50 recipients) | 0.86ms | 0.01ms | 0.20ms | 0.16ms | 0.25ms | 0.14ms | 0.32ms | 0.05ms | 0.12ms | 0.45ms | **Transit/Rust** (85.9x faster) |
-| Session Validation | 0.87ms | 0.00ms | 0.15ms | 0.12ms | 0.19ms | 0.13ms | 0.20ms | 0.04ms | 0.12ms | 0.45ms | **Transit/Rust** (238.6x faster) |
-| Typing Indicator | 0.92ms | 0.01ms | 0.13ms | 0.12ms | 0.16ms | 0.10ms | 0.26ms | 0.06ms | 0.10ms | 0.44ms | **Transit/Rust** (166.3x faster) |
-| Read Receipt | 0.70ms | 0.00ms | 0.11ms | 0.11ms | 0.16ms | 0.09ms | 0.22ms | 0.04ms | 0.11ms | 0.48ms | **Transit/Rust** (331.0x faster) |
-| Presence Update (30 contacts) | 0.85ms | 0.02ms | 0.21ms | 0.19ms | 0.13ms | 0.09ms | 0.24ms | 0.05ms | 0.13ms | 0.38ms | **Transit/Rust** (36.0x faster) |
-| AI Content Moderation | 0.85ms | 0.00ms | 0.16ms | 0.14ms | 0.12ms | 0.08ms | 0.22ms | 0.04ms | 0.10ms | 0.59ms | **Transit/Rust** (173.2x faster) |
-| Message Search (1000 messages) | 5.19ms | 1.01ms | 3.71ms | 0.96ms | 1.32ms | 1.21ms | 2.50ms | 2.17ms | 2.74ms | 3.27ms | **Transit/Java** (5.4x faster) |
-| Analytics Pipeline (500 events) | 2.72ms | 0.47ms | 1.89ms | 0.59ms | 0.84ms | 0.56ms | 1.19ms | 1.30ms | 1.74ms | 2.11ms | **Transit/Rust** (5.8x faster) |
-| Notification Builder (20 users) | 0.98ms | 0.02ms | 0.14ms | 0.18ms | 0.12ms | 0.09ms | 0.22ms | 0.06ms | 0.13ms | 0.50ms | **Transit/Rust** (42.5x faster) |
-| User Lookup | 0.74ms | 0.00ms | 0.14ms | 0.12ms | 0.14ms | 0.11ms | 0.25ms | 0.04ms | 0.10ms | 0.53ms | **Transit/Rust** (313.5x faster) |
-| Channel History (50 messages) | 1.86ms | 0.00ms | 0.12ms | 0.12ms | 0.09ms | 0.07ms | 0.20ms | 0.05ms | 0.11ms | 0.54ms | **Transit/Rust** (374.9x faster) |
+| Message Send Pipeline (auth+mod+route+persist) | 0.77ms | 0.00ms | 0.10ms | 0.01ms | 0.15ms | 0.09ms | 0.18ms | 0.04ms | 0.08ms | N/Ams | **Transit/Rust** (235.6x faster) |
+| Fan-out Delivery (50 recipients) | 0.54ms | 0.01ms | 0.30ms | 0.02ms | 0.18ms | 0.10ms | 0.26ms | 0.08ms | 0.14ms | N/Ams | **Transit/Rust** (48.1x faster) |
+| Session Validation | 0.83ms | 0.00ms | 0.15ms | 0.01ms | 0.13ms | 0.08ms | 0.26ms | 0.05ms | 0.10ms | N/Ams | **Transit/Rust** (387.0x faster) |
+| Typing Indicator | 1.10ms | 0.00ms | 0.19ms | 0.01ms | 0.24ms | 0.07ms | 0.17ms | 0.04ms | 0.10ms | N/Ams | **Transit/Rust** (618.4x faster) |
+| Read Receipt | 0.69ms | 0.00ms | 0.20ms | 0.01ms | 0.20ms | 0.08ms | 0.22ms | 0.03ms | 0.11ms | N/Ams | **Transit/Rust** (303.1x faster) |
+| Presence Update (30 contacts) | 0.91ms | 0.01ms | 0.21ms | 0.01ms | 0.13ms | 0.10ms | 0.21ms | 0.04ms | 0.10ms | N/Ams | **Transit/Java** (76.0x faster) |
+| AI Content Moderation | 0.40ms | 0.01ms | 0.14ms | 0.01ms | 0.08ms | 0.06ms | 0.22ms | 0.04ms | 0.14ms | N/Ams | **Transit/Rust** (80.3x faster) |
+| Message Search (1000 messages) | 5.45ms | 0.93ms | 4.37ms | 0.67ms | 1.04ms | 0.88ms | 2.49ms | 2.61ms | 2.43ms | N/Ams | **Transit/Java** (8.1x faster) |
+| Analytics Pipeline (500 events) | 2.04ms | 0.43ms | 1.75ms | 0.32ms | 0.61ms | 0.48ms | 1.33ms | 1.24ms | 1.43ms | N/Ams | **Transit/Java** (6.3x faster) |
+| Notification Builder (20 users) | 1.38ms | 0.01ms | 0.23ms | 0.02ms | 0.23ms | 0.07ms | 0.19ms | 0.03ms | 0.13ms | N/Ams | **Transit/Rust** (118.0x faster) |
+| User Lookup | 0.77ms | 0.01ms | 0.14ms | 0.01ms | 0.19ms | 0.08ms | 0.24ms | 0.04ms | 0.11ms | N/Ams | **Transit/Rust** (139.1x faster) |
+| Channel History (50 messages) | 1.44ms | 0.00ms | 0.14ms | 0.01ms | 0.23ms | 0.11ms | 0.17ms | 0.05ms | 0.09ms | N/Ams | **Transit/Rust** (943.2x faster) |
+
+#### Concurrent (10 parallel requests)
+
+| Operation | FastAPI | Transit/Rust | Transit/Python | Transit/Java | gRPC | Thrift | Unix Sock | Subprocess | ZeroMQ | Redis | Winner |
+| ----------- | --------- | -------------- | ---------------- | -------------- | ------ | -------- | ----------- | ------------ | -------- | ------- | -------- |
+| Message Send Pipeline (auth+mod+route+persist) | 3.01ms | 0.03ms | 0.90ms | 0.01ms | 0.43ms | 0.35ms | 0.87ms | 0.06ms | 0.10ms | N/Ams | **Transit/Java** (446.8x faster) |
+| Fan-out Delivery (50 recipients) | 2.01ms | 0.09ms | 1.03ms | 0.04ms | 0.72ms | 0.42ms | 0.92ms | 0.10ms | 0.16ms | N/Ams | **Transit/Java** (46.3x faster) |
+| Session Validation | 2.70ms | 0.04ms | 1.11ms | 0.01ms | 1.06ms | 0.40ms | 0.84ms | 0.06ms | 0.11ms | N/Ams | **Transit/Java** (209.4x faster) |
+| Typing Indicator | 2.74ms | 0.03ms | 1.35ms | 0.01ms | 0.78ms | 0.35ms | 0.82ms | 0.06ms | 0.09ms | N/Ams | **Transit/Java** (201.4x faster) |
+| Read Receipt | 1.56ms | 0.01ms | 0.84ms | 0.01ms | 0.41ms | 0.35ms | 0.77ms | 0.07ms | 100.16ms | N/Ams | **Transit/Rust** (139.9x faster) |
+| Presence Update (30 contacts) | 5.44ms | 0.12ms | 1.47ms | 0.03ms | 1.29ms | 0.52ms | 0.84ms | 0.08ms | 0.10ms | N/Ams | **Transit/Java** (161.2x faster) |
+| AI Content Moderation | 2.27ms | 0.02ms | 0.80ms | 0.01ms | 0.41ms | 0.39ms | 0.94ms | 0.08ms | 0.07ms | N/Ams | **Transit/Java** (377.9x faster) |
+| Message Search (1000 messages) | 26.25ms | 5.20ms | 15.02ms | 0.66ms | 5.89ms | 4.70ms | 8.45ms | 5.42ms | 4.92ms | N/Ams | **Transit/Java** (39.7x faster) |
+| Analytics Pipeline (500 events) | 12.99ms | 2.19ms | 5.90ms | 0.32ms | 3.42ms | 2.18ms | 5.11ms | 2.51ms | 2.43ms | N/Ams | **Transit/Java** (40.2x faster) |
+| Notification Builder (20 users) | 6.35ms | 0.05ms | 0.57ms | 0.01ms | 0.44ms | 0.39ms | 0.91ms | 0.07ms | 0.09ms | N/Ams | **Transit/Java** (545.4x faster) |
+| User Lookup | 2.02ms | 0.01ms | 0.76ms | 0.01ms | 0.38ms | 0.33ms | 0.72ms | 0.06ms | 0.06ms | N/Ams | **Transit/Java** (344.0x faster) |
+| Channel History (50 messages) | 9.27ms | 0.03ms | 1.07ms | 0.01ms | 1.09ms | 0.57ms | 0.75ms | 0.06ms | 0.07ms | N/Ams | **Transit/Java** (691.9x faster) |
 
 ## Quick Start
 
