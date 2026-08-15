@@ -53,7 +53,6 @@ export default defineConfig({
 					label: 'Project',
 					items: [
 						{ label: 'Live Stats', slug: 'stats' },
-						{ label: 'Feedback', slug: 'reference/feedback' },
 					],
 				},
 				{
