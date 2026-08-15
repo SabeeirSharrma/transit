@@ -1,5 +1,19 @@
 # transit-cli
 
+## 3.0.0
+
+### Major Changes
+
+- Add C/C++ support, make python faster
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/codegen@3.0.0
+  - @sabeeirsharrma/transit@3.0.0
+  - @sabeeirsharrma/scanner@3.0.0
+  - @sabeeirsharrma/schema@3.0.0
+
 ## 2.5.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @sabeeirsharrma/schema
 
+## 3.0.0
+
+### Major Changes
+
+- Add C/C++ support, make python faster
+
 ## 2.5.0
 
 ### Minor Changes
