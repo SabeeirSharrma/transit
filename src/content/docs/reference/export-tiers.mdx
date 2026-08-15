@@ -103,6 +103,22 @@ private String internalHelper(String data) {
 }
 ```
 
+### C and C++
+
+Any function whose signature is declared via the generated glue header is found automatically:
+
+```c
+// transit_c_glue.gen.h
+void process_chunk(const char* args_json, char** result_json);
+```
+
+```cpp
+// transit_cpp_glue.gen.h
+void fast_compute(const char* args_json, char** result_json);
+```
+
+Transit detects these signatures from the generated headers and exports the corresponding implementations.
+
 ### JavaScript/TypeScript
 
 Any exported function is found:

@@ -11,6 +11,8 @@ This page describes the wire format Transit uses to communicate between JavaScri
 
 When JavaScript calls a Python or Java function, it sends a small binary message over a network connection. Here are the key facts:
 
+> **Note on Rust, C, and C++:** These languages run in-process as native Node.js addons via the `RustDevBridge`. They **do not** use this binary protocol and communicate directly in-process with zero serialization overhead.
+
 - **Transport:** TCP on `127.0.0.1` (your computer only, not the internet)
 - **Byte order:** Little-endian (the standard for most computers)
 - **Protocol version:** 1

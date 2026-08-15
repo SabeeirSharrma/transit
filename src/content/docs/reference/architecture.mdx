@@ -11,14 +11,16 @@ When you write this code:
 
 ```js
 const rs = transit.rust("./rust");
+const c = transit.c("./c");
 const greeting = await rs.greet("World");
+const chunk = await c.processChunk({ data: [1, 2] });
 ```
 
 Transit does three things:
 
-1. **Scans** your Rust files to find functions
-2. **Loads** the compiled Rust code
-3. **Calls** the Rust function and returns the result
+1. **Scans** your Rust/C/C++ files to find functions
+2. **Loads** the compiled native code
+3. **Calls** the function directly in-process and returns the result
 
 Here is a simplified diagram of what happens:
 
@@ -26,19 +28,19 @@ Here is a simplified diagram of what happens:
 Your JavaScript code
        |
        v
-  transit.rust("./rust")
+  transit.rust("./rust") or transit.c("./c")
        |
        v
-  Scanner finds: greet, add (from pub fn declarations)
+  Scanner finds: greet, add (from pub fn or generated headers)
        |
        v
-  Loads the compiled Rust code (index.node or .so file)
+  Loads the compiled native code (index.node or .so file)
        |
        v
   Returns a "proxy" object that looks like your functions
        |
        v
-  rs.greet("World") -> calls the actual Rust function -> returns result
+  rs.greet("World") -> calls the actual native function -> returns result
 ```
 
 ## The Components
