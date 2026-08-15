@@ -23,12 +23,22 @@ fn java_lang() -> Language {
     tree_sitter_java::LANGUAGE.into()
 }
 
+fn c_lang() -> Language {
+    tree_sitter_c::LANGUAGE.into()
+}
+
+fn cpp_lang() -> Language {
+    tree_sitter_cpp::LANGUAGE.into()
+}
+
 fn language_for_file(path: &Path) -> Option<Language> {
     match path.extension()?.to_str()? {
         "rs" => Some(rust_lang()),
         "js" | "ts" | "mjs" | "mts" => Some(js_lang()),
         "py" => Some(python_lang()),
         "java" => Some(java_lang()),
+        "c" | "h" | "hc" => Some(c_lang()),
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx" => Some(cpp_lang()),
         _ => None,
     }
 }
@@ -39,6 +49,8 @@ fn language_name_for_file(path: &Path) -> Option<&'static str> {
         "js" | "ts" | "mjs" | "mts" => Some("javascript"),
         "py" => Some("python"),
         "java" => Some("java"),
+        "c" | "h" | "hc" => Some("c"),
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx" => Some("cpp"),
         _ => None,
     }
 }
@@ -232,6 +244,42 @@ fn extract_signature(source: &[u8], node: tree_sitter::Node) -> String {
     }
 }
 
+fn check_transit_marker_before_line(source: &[u8], line_idx: usize) -> bool {
+    let mut byte_offset = 0;
+    for (i, l) in source.split(|&b| b == b'\n').enumerate() {
+        if i == line_idx {
+            break;
+        }
+        byte_offset += l.len() + 1;
+    }
+    let region = &source[..byte_offset.min(source.len())];
+    let mut check_pos = region.len();
+    while check_pos > 0 {
+        if let Some(nl_pos) = region[..check_pos].iter().rposition(|&b| b == b'\n') {
+            let line = &region[nl_pos + 1..check_pos];
+            let trimmed = std::str::from_utf8(line).unwrap_or("").trim();
+            if trimmed.is_empty() {
+                check_pos = nl_pos;
+                continue;
+            }
+            return trimmed.contains("transit:function");
+        } else {
+            return std::str::from_utf8(&region[..check_pos]).unwrap_or("").trim().contains("transit:function");
+        }
+    }
+    false
+}
+
+fn resolve_export_tier(has_marker: bool, file_has_transit_file_marker: bool) -> u8 {
+    if has_marker {
+        3
+    } else if file_has_transit_file_marker {
+        2
+    } else {
+        1
+    }
+}
+
 // ─── Core scanning logic ──────────────────────────────────────────────────────
 
 fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
@@ -270,49 +318,8 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                         let fn_name = after_fn[..paren_pos].trim();
                         let signature = trimmed.trim_end_matches('{').trim().to_string();
                         
-                        // Check for transit:function marker in preceding lines
-                        // by finding the byte offset of this line
-                        let mut byte_offset = 0;
-                        for (i, l) in source_str.lines().enumerate() {
-                            if i == line_idx {
-                                break;
-                            }
-                            byte_offset += l.len() + 1; // +1 for newline
-                        }
-                        
-                        // Create a virtual node position for marker detection
-                        // We check the source around this line for the marker
-                        let has_marker = {
-                            let region = &source[..byte_offset];
-                            let mut check_pos = region.len();
-                            let mut found = false;
-                            while check_pos > 0 {
-                                if let Some(nl_pos) = region[..check_pos].iter().rposition(|&b| b == b'\n') {
-                                    let line = &region[nl_pos + 1..check_pos];
-                                    let line_str = std::str::from_utf8(line).unwrap_or("");
-                                    let trimmed_line = line_str.trim();
-                                    if trimmed_line.is_empty() {
-                                        check_pos = nl_pos;
-                                        continue;
-                                    }
-                                    found = trimmed_line.contains("transit:function");
-                                    break;
-                                } else {
-                                    let line_str = std::str::from_utf8(&region[..check_pos]).unwrap_or("");
-                                    found = line_str.trim().contains("transit:function");
-                                    break;
-                                }
-                            }
-                            found
-                        };
-                        
-                        let export_tier = if has_marker {
-                            3
-                        } else if file_has_transit_file_marker {
-                            2
-                        } else {
-                            1
-                        };
+                        let has_marker = check_transit_marker_before_line(source, line_idx);
+                        let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
                         
                         entries.push(ManifestEntry {
                             language: lang_name.to_string(),
@@ -360,44 +367,8 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                             let signature = trimmed.trim_end_matches('{').trim().to_string();
                             
                             // Check for transit:function marker in preceding lines
-                            let has_marker = {
-                                let mut byte_offset = 0;
-                                for (i, l) in source_str.lines().enumerate() {
-                                    if i == line_idx {
-                                        break;
-                                    }
-                                    byte_offset += l.len() + 1;
-                                }
-                                let region = &source[..byte_offset];
-                                let mut check_pos = region.len();
-                                let mut found = false;
-                                while check_pos > 0 {
-                                    if let Some(nl_pos) = region[..check_pos].iter().rposition(|&b| b == b'\n') {
-                                        let line = &region[nl_pos + 1..check_pos];
-                                        let line_str = std::str::from_utf8(line).unwrap_or("");
-                                        let trimmed_line = line_str.trim();
-                                        if trimmed_line.is_empty() {
-                                            check_pos = nl_pos;
-                                            continue;
-                                        }
-                                        found = trimmed_line.contains("transit:function");
-                                        break;
-                                    } else {
-                                        let line_str = std::str::from_utf8(&region[..check_pos]).unwrap_or("");
-                                        found = line_str.trim().contains("transit:function");
-                                        break;
-                                    }
-                                }
-                                found
-                            };
-                            
-                            let export_tier = if has_marker {
-                                3
-                            } else if file_has_transit_file_marker {
-                                2
-                            } else {
-                                1
-                            };
+                            let has_marker = check_transit_marker_before_line(source, line_idx);
+                            let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
                             
                             entries.push(ManifestEntry {
                                 language: lang_name.to_string(),
@@ -406,6 +377,112 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                                 signature,
                                 export_tier,
                             });
+                        }
+                    }
+                }
+            }
+        }
+        return entries;
+    }
+
+    // For C, detect non-static functions (C's native visibility baseline)
+    if lang_name == "c" {
+        let source_str = std::str::from_utf8(source).unwrap_or("");
+        for (line_idx, line) in source_str.lines().enumerate() {
+            let trimmed = line.trim();
+            // Skip comments and preprocessor directives
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#") {
+                continue;
+            }
+            // Match function definitions: type name(params) { or type name(params);
+            // Skip static functions (not externally visible)
+            if trimmed.contains("static ") {
+                continue;
+            }
+            // Look for function definitions: contains '(' and either '{' or ';'
+            // Must not be a variable declaration (no '=' before '(')
+            if let Some(paren_pos) = trimmed.find('(') {
+                let before_paren = &trimmed[..paren_pos];
+                let after_paren = &trimmed[paren_pos..];
+                // Check it's a function definition (has closing paren and either { or ;)
+                if after_paren.contains(')') && (after_paren.contains('{') || after_paren.contains(';')) {
+                    // Check it's not a macro or variable
+                    if !before_paren.contains('=') && !before_paren.ends_with("if")
+                        && !before_paren.ends_with("while") && !before_paren.ends_with("for")
+                        && !before_paren.ends_with("switch") && !before_paren.ends_with("return")
+                    {
+                        // Extract function name: last identifier before '('
+                        let words: Vec<&str> = before_paren.split_whitespace().collect();
+                        if let Some(fn_name) = words.last() {
+                            // Skip common non-function patterns
+                            if *fn_name != "if" && *fn_name != "while" && *fn_name != "for"
+                                && *fn_name != "switch" && *fn_name != "return"
+                                && !fn_name.starts_with('"') && !fn_name.starts_with('*')
+                            {
+                                let signature = trimmed.trim_end_matches('{').trim().trim_end_matches(';').trim().to_string();
+                                
+                                let has_marker = check_transit_marker_before_line(source, line_idx);
+                                let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
+                                
+                                entries.push(ManifestEntry {
+                                    language: lang_name.to_string(),
+                                    source_file: path.to_string_lossy().to_string(),
+                                    function_name: fn_name.to_string(),
+                                    signature,
+                                    export_tier,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return entries;
+    }
+
+    // For C++, detect non-static functions (similar to C but with additional patterns)
+    if lang_name == "cpp" {
+        let source_str = std::str::from_utf8(source).unwrap_or("");
+        for (line_idx, line) in source_str.lines().enumerate() {
+            let trimmed = line.trim();
+            // Skip comments and preprocessor directives
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#") {
+                continue;
+            }
+            // Skip static functions
+            if trimmed.contains("static ") {
+                continue;
+            }
+            // Look for function definitions
+            if let Some(paren_pos) = trimmed.find('(') {
+                let before_paren = &trimmed[..paren_pos];
+                let after_paren = &trimmed[paren_pos..];
+                if after_paren.contains(')') && (after_paren.contains('{') || after_paren.contains(';')) {
+                    if !before_paren.contains('=') && !before_paren.ends_with("if")
+                        && !before_paren.ends_with("while") && !before_paren.ends_with("for")
+                        && !before_paren.ends_with("switch") && !before_paren.ends_with("return")
+                        && !before_paren.ends_with("catch")
+                    {
+                        let words: Vec<&str> = before_paren.split_whitespace().collect();
+                        if let Some(fn_name) = words.last() {
+                            if *fn_name != "if" && *fn_name != "while" && *fn_name != "for"
+                                && *fn_name != "switch" && *fn_name != "return" && *fn_name != "catch"
+                                && !fn_name.starts_with('"') && !fn_name.starts_with('*')
+                                && !fn_name.starts_with('~') // destructors
+                            {
+                                let signature = trimmed.trim_end_matches('{').trim().trim_end_matches(';').trim().to_string();
+                                
+                                let has_marker = check_transit_marker_before_line(source, line_idx);
+                                let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
+                                
+                                entries.push(ManifestEntry {
+                                    language: lang_name.to_string(),
+                                    source_file: path.to_string_lossy().to_string(),
+                                    function_name: fn_name.to_string(),
+                                    signature,
+                                    export_tier,
+                                });
+                            }
                         }
                     }
                 }
@@ -717,4 +794,51 @@ pub fn clear_cache(root: String) {
 #[napi]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[napi]
+pub fn detect_holycc() -> Option<String> {
+    use std::process::Command;
+    
+    Command::new("which")
+        .arg("hcc")
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    Some(path)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+}
+
+#[napi]
+pub fn transpile_holycc(hcc_path: String, source_path: String) -> napi::Result<String> {
+    use std::process::Command;
+    use std::path::Path;
+    
+    let source = Path::new(&source_path);
+    if !source.exists() {
+        return Err(napi::Error::from_reason(format!("Source file not found: {}", source_path)));
+    }
+    
+    let output = Command::new(&hcc_path)
+        .arg("-transpile")
+        .arg(&source_path)
+        .output()
+        .map_err(|e| napi::Error::from_reason(format!("Failed to execute hcc: {}", e)))?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(napi::Error::from_reason(format!("hcc transpilation failed: {}", stderr)));
+    }
+    
+    let c_code = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok(c_code)
 }

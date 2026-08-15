@@ -1,310 +1,226 @@
-# Transit Showcase Demo — Feedback
+# Transit/Python — Performance Analysis & Optimization Guide
 
-**Date:** 2026-07-31
-**Context:** Building a self-contained demo at `demo/` that calls Rust, Python, and Java from a single `index.js`.
-
----
-
-## Issue 1: Java Thread Pool Deadlock
-
-**Severity:** Critical — Java calls hang indefinitely
-**Component:** `transit-java-runtime` / `TransitServer.java`
-
-### Symptom
-
-After the Node.js client connects 8 sockets to the Java server, all function calls hang. No error, no timeout — just silence.
-
-### Root Cause
-
-`TransitServer.java` creates a single `FixedThreadPool(min(cores, 8))` and submits **both** `handleClient` tasks (one per socket connection) **and** `handleCall` tasks (one per request) to the same pool.
-
-With 8 socket connections and a pool of 8 threads:
-1. All 8 threads are occupied by `handleClient` (blocked on `readExact()`)
-2. When a request arrives, `handleClient` submits `handleCall` to the same pool
-3. No threads are available → `handleCall` queues forever
-4. `handleClient` loops back to `readExact()` → **deadlock**
-
-### Fix
-
-Use `Executors.newCachedThreadPool()` instead of `FixedThreadPool`. This lets the pool grow dynamically so `handleCall` tasks are never starved.
-
-**Patched file:** `demo/java/lib/transit/java/TransitServer.java`
-
-```java
-// BEFORE (deadlock-prone):
-private final ExecutorService executor = Executors.newFixedThreadPool(
-    Math.min(Runtime.getRuntime().availableProcessors(), 8)
-);
-
-// AFTER:
-private final ExecutorService executor = Executors.newCachedThreadPool();
-```
-
-### Recommendation
-
-Fix this in the published `transit-java-runtime`. The `FixedThreadPool` with size matching the Node.js connection pool size (`min(cpus, 8)`) is an inherent deadlock trap.
+**Date:** 2026-08-01
+**Context:** Analysis of `transit-py-runtime` (Python TCP server) and `transit-python-runtime-js` (Node.js client) to identify bottlenecks and actionable speedups.
 
 ---
 
-## Issue 2: Java Runtime Not Included in npm Package
+## Current Architecture
 
-**Severity:** High — Java users must manually download source files from the monorepo
-**Component:** `@sabeeirsharrma/java-runtime`
+Transit/Python uses a **persistent TCP process** model:
 
-### Symptom
-
-After `bun install @sabeeirsharrma/transit`, the Java runtime package contains only TypeScript/JS bridge code — no `.java` source files. Users must manually download `TransitServer.java`, `BinaryProtocol.java`, and `TransitService.java` from the GitHub monorepo and compile them.
-
-### What Users Have to Do
-
-```bash
-# Download Java runtime sources manually
-mkdir -p java/lib/transit/java
-curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/BinaryProtocol.java" --output-dir java/lib/transit/java/
-curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/TransitServer.java" --output-dir java/lib/transit/java/
-curl -sO "https://raw.githubusercontent.com/sabeeirsharrma/transit/main/packages/transit-java-runtime/src/main/java/transit/java/TransitService.java" --output-dir java/lib/transit/java/
-
-# Compile Java runtime
-mkdir -p java/build
-javac -d java/build java/lib/transit/java/*.java
-
-# Compile user code against the runtime
-javac -cp java/build -d java/build java/src/main/java/com/demo/*.java
+```text
+JS (Node.js)
+  │
+  ▼
+PythonProcessManager (transit-python-runtime-js)
+  │  - Spawns Python process
+  │  - Maintains socket pool (round-robin)
+  │  - Binary protocol (v0.1, little-endian)
+  │
+  ▼  (UDS on Linux/macOS, TCP loopback on Windows)
+TransitServer (transit_server.py)
+  │  - ThreadPoolExecutor for connections
+  │  - ThreadPoolExecutor for call dispatch
+  │  - stdlib json (or orjson opt-in)
+  │
+  ▼
+User Python functions (JSON string → JSON string)
 ```
 
-### Recommendation
-
-Include the compiled `.class` files (or the `.java` sources) in the npm package under a `java/` or `lib/` directory. Users should only need to compile their own code, not the framework.
+The **bridge itself is already well-optimized**: binary protocol, Unix domain sockets on Linux, zero-copy `recv_into`, `memoryview` parsing, `Buffer.allocUnsafe` on the JS side, pre-encoded function name caching, and connection pooling.
 
 ---
 
-## Issue 3: Python `transit_server.py` Not Included in npm Package
+## Where the Time Goes
 
-**Severity:** High — Python users must manually copy the server file
-**Component:** `@sabeeirsharrma/python-runtime`
+### Bottleneck 1: CPython Interpreter Overhead (Biggest Factor)
 
-### Symptom
+The benchmarks show Transit/Python is **5–727x slower** than Transit/Rust and Transit/Java on compute-heavy tasks:
 
-After `bun install @sabeeirsharrma/transit`, there is no `transit_server.py` anywhere in `node_modules`. Users must know to copy it from the monorepo:
+| Operation | Transit/Python | Transit/Rust | Transit/Java |
+|---|---|---|---|
+| Matrix Multiply (50×50) | 17.63ms | 0.98ms (18x) | 1.02ms (17x) |
+| SHA-256 (10K rounds) | 4.28ms | 0.02ms (214x) | 0.01ms (428x) |
+| Fibonacci Memo (n=38) | 0.19ms | 0.04ms (5x) | 0.01ms (19x) |
+| Matrix Determinant (8×8) | 21.81ms | 0.09ms (242x) | 0.03ms (727x) |
 
-```bash
-cp node_modules/@sabeeirsharrma/transit/packages/transit-py-runtime/transit_server.py python/
-```
+This is CPython's interpreter overhead and GIL — the bridge can't fix this.
 
-But this path doesn't exist in the published package either — the `packages/` directory isn't published.
+### Bottleneck 2: `ThreadPoolExecutor` + GIL Contention (Concurrent Performance)
 
-### What I Did
-
-I fetched the full `transit_server.py` source from GitHub and bundled it directly in the demo's `python/` directory. This is a 250+ line file that users shouldn't have to hunt for.
-
-### Recommendation
-
-Either:
-1. Include `transit_server.py` in the `@sabeeirsharrma/python-runtime` package
-2. Or have `transit.python()` automatically copy/proxy it to the user's Python directory on first call
-
----
-
-## Issue 4: Transit Wraps Args in Arrays
-
-**Severity:** Medium — breaks naive JSON parsers in user code
-**Component:** `transit-java-runtime` / `transit-py-runtime` (protocol layer)
-
-### Symptom
-
-When calling `jv.processRecord({ id: "test", value: 42 })` from JS, the Java function receives:
-
-```json
-[{"id":"test","value":42}]
-```
-
-Not:
-
-```json
-{"id":"test","value":42}
-```
-
-Similarly, `jv.computeStats({ values: [1, 2, 3] })` sends:
-
-```json
-[{"values":[1,2,3]}]
-```
-
-### Impact
-
-Any Java/Python function that does naive JSON parsing (e.g., `json.loads(args)` and immediately accessing keys) will fail silently — getting `null` for all fields and defaulting to fallback values.
-
-In my demo, this caused `processRecord` to return `"id":"unknown"` and `"value":0.0` for every record until I added array-unwrapping logic.
-
-### Recommendation
-
-Document this behavior prominently in the API reference. The current docs show:
+In `transit_server.py` (lines 112–113), both connection handling and call dispatch use `ThreadPoolExecutor`:
 
 ```python
-def process_data(args_json):
-    args = json.loads(args_json)
-    items = args.get("items", [])
+self._executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
+self._call_executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
 ```
 
-This code would break. It should be:
+For **CPU-bound** Python functions, threads are serialized by the GIL. Under concurrent load, threads fight over the GIL, making concurrent performance **worse** than serial:
+
+| Operation | Serial | Concurrent | Degradation |
+|---|---|---|---|
+| Matrix Determinant (8×8) | 21.81ms | 442.52ms | **20x slower** |
+| Text Analysis (5000 words) | 14.26ms | 265.14ms | **19x slower** |
+| SHA-256 (10K rounds) | 4.28ms | 81.12ms | **19x slower** |
+
+This is the **single biggest architectural issue** — GIL contention under concurrency.
+
+### Bottleneck 3: JSON Serialization (Per-Call Overhead)
+
+Every call does `json.loads()` → compute → `json.dumps()`. For small payloads this is negligible, but for large payloads (ETL pipelines, large matrices) it adds measurable latency. The `orjson` opt-in exists but isn't enabled by default.
+
+---
+
+## Optimization Recommendations
+
+### 1. Enable `orjson` (Already Built In — Zero Effort)
+
+**Impact:** 2–10x faster JSON on large payloads
+**Effort:** One environment variable
+
+The server already supports this via `TRANSIT_USE_ORJSON=1` (lines 38–63 of `transit_server.py`), but it's opt-in. Enable it:
+
+```bash
+TRANSIT_USE_ORJSON=1 node your_app.js
+```
+
+Or pass it through the Transit options:
+
+```js
+const py = transit.python("./python", { env: { TRANSIT_USE_ORJSON: "1" } })
+```
+
+**Recommendation:** Make `orjson` the default if installed, falling back to stdlib `json`. Keep the shim scoped to registered handler dispatch — do not replace `sys.modules["json"]` process-wide, as that affects all user code and third-party libraries.
+
+---
+
+### 2. Switch `_call_executor` to `ProcessPoolExecutor` (Bypasses GIL)
+
+**Impact:** 2–8x concurrent speedup for CPU-bound functions
+**Effort:** Small code change in `transit_server.py`
+
+Replace the call executor (line 113):
 
 ```python
-def process_data(args_json):
+# BEFORE (GIL-bound):
+self._call_executor = ThreadPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
+
+# AFTER (GIL-free):
+from concurrent.futures import ProcessPoolExecutor
+self._call_executor = ProcessPoolExecutor(max_workers=min(os.cpu_count() or 4, 8))
+```
+
+**Caveats:**
+- Registered functions must be picklable (module-level functions already are)
+- The `_functions` dict needs to be shared with worker processes (e.g., via initializer)
+- IPC overhead between main process and workers adds ~0.1-0.5ms per call
+- Best for CPU-bound work; for I/O-bound work, `ThreadPoolExecutor` is still fine
+
+**Trade-off:** Serial performance may degrade slightly due to IPC overhead, but concurrent performance (the main pain point) improves dramatically.
+
+---
+
+### 3. Rewrite Server with `asyncio` + `uvloop` (I/O Layer Optimization)
+
+**Impact:** 2–4x on connection handling and I/O
+**Effort:** Medium — full server rewrite
+
+The current server uses blocking `socket` + `threading`. An `asyncio` rewrite with `uvloop` would:
+- Eliminate thread overhead for connection management
+- Use `asyncio.start_unix_server()` / `asyncio.start_server()` for efficient multiplexing
+- Combine with `ProcessPoolExecutor` via `loop.run_in_executor()` for CPU-bound calls
+
+```python
+import asyncio
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass  # Fall back to default asyncio
+
+class AsyncTransitServer:
+    async def handle_client(self, reader, writer):
+        loop = asyncio.get_running_loop()
+        while True:
+            header = await reader.readexactly(HEADER_SIZE)
+            # ... parse and dispatch
+            result = await loop.run_in_executor(self._process_pool, fn, args)
+            writer.write(response)
+```
+
+---
+
+### 4. Offload Compute to C Extensions in User Code
+
+**Impact:** 10–100x on numerical work
+**Effort:** Depends on user code
+
+For users doing numerical computation in Python, the real fix is to use native extensions:
+
+```python
+# SLOW: Pure Python matrix multiply
+def matrix_multiply(args_json):
+    # Pure Python nested loops → ~17ms for 50×50
+    ...
+
+# FAST: NumPy (C/Fortran under the hood)
+import numpy as np
+def matrix_multiply(args_json):
     args = json.loads(args_json)
-    # Transit wraps args as [{...}], extract the first object
-    if isinstance(args, list) and len(args) > 0:
-        args = args[0]
-    items = args.get("items", [])
+    a = np.array(args["a"])
+    b = np.array(args["b"])
+    result = (a @ b).tolist()  # → ~0.1ms for 50×50
+    return json.dumps({"result": result})
 ```
-
-Or better: have the Transit server unwrap automatically before dispatching to user functions.
 
 ---
 
-## Issue 5: Java `classpath` and `mainClass` Must Be Configured Manually
+### 5. Use the Right Language (Transit's Core Value)
 
-**Severity:** Medium — confusing for new users
-**Component:** `transit-java-runtime` / `JavaProcessManager`
+**Impact:** 10–1000x
+**Effort:** Low if reusing an existing Rust/Java bridge function; higher if writing a new language port from scratch
 
-### Symptom
-
-Calling `transit.java(dir)` without options fails with:
-
-```
-Java class not found: transit.java.TransitService (looked in ./java/src/main/java)
-```
-
-Users must know to pass:
+Transit's whole point is that you can call the right language for the job. For compute-heavy work:
 
 ```js
-const jv = transit.java(resolve(__dirname, "./java/src/main/java"), {
-  classpath: resolve(__dirname, "./java/build"),
-  mainClass: "com.demo.App",
-});
+// Instead of:
+const result = await py.sha256Hash(data)        // 4.28ms
+
+// Use:
+const result = await rs.sha256Hash(data)        // 0.02ms (214x faster)
+// or:
+const result = await jv.sha256Hash(data)        // 0.01ms (428x faster)
 ```
 
-The default `mainClass` is `transit.java.TransitService`, which only exists if users compiled the Transit runtime sources. The `classpath` defaults to `<javaDir>/build`, which may not exist.
-
-### Recommendation
-
-Either:
-1. Auto-detect the main class by scanning for `public static void main` in compiled `.class` files
-2. Or default to scanning for any class with a `main` method in the classpath
-3. Or provide a better error message that lists available classes
-
----
-
-## Issue 6: Java/Python Return JSON Strings, Not Objects
-
-**Severity:** Medium — unexpected API behavior
-**Component:** Transit protocol layer
-
-### Symptom
-
-In JavaScript:
-
-```js
-const result = await jv.processRecord({ id: "test", value: 42 });
-console.log(typeof result); // "string"
-console.log(result);        // '{"id":"test","processed_value":46.75,...}'
-```
-
-Users expect `result` to be a parsed object. Instead, they get a JSON string that must be manually parsed with `JSON.parse()`.
-
-This is inconsistent with how most JS APIs work and is not documented in the getting-started guide.
-
-### Recommendation
-
-Have the Transit JS bridge auto-parse JSON string results into objects. Or at minimum, document this clearly in the API reference with a helper function:
-
-```js
-function parseResult(raw) {
-  return typeof raw === "string" ? JSON.parse(raw) : raw;
-}
-```
-
----
-
-## Issue 7: `napi-build` Version Mismatch in Getting Started Guide
-
-**Severity:** Low — causes build failure for new users
-**Component:** docs / getting-started.md
-
-### Symptom
-
-The getting-started guide shows:
-
-```toml
-[dependencies]
-napi = { version = "3", features = ["serde-json"] }
-napi-derive = "3"
-
-[build-dependencies]
-napi-build = "3"
-```
-
-But `napi-build` v3 does not exist on crates.io. The latest is v2.4.0. Running `cargo build` fails:
-
-```
-error: failed to select a version for the requirement `napi-build = "^3"`
-```
-
-### Fix
-
-The Transit repo's own example (`examples/js-rust-java-demo/rust/Cargo.toml`) correctly uses:
-
-```toml
-[dependencies]
-napi = { version = "3", features = ["async"] }
-napi-derive = "3"
-
-[build-dependencies]
-napi-build = "2"
-```
-
-### Recommendation
-
-Update `docs/getting-started.md` to use `napi-build = "2"`.
-
----
-
-## Issue 8: Scanner Detects TransitServer.start as Exported Function
-
-**Severity:** Low — cosmetic, clutters function list
-**Component:** `transit-scanner`
-
-### Symptom
-
-`transit.info()` shows:
-
-```
-python (./python): 7 functions
-  - register_function [tier 1]
-  - start_server [tier 1]
-  - TransitServer.start [tier 1]    ← class method, not user function
-  - TransitServer.stop [tier 1]     ← class method, not user function
-  - analyze_text [tier 1]
-  - transform_data [tier 1]
-  - format_report [tier 1]
-```
-
-`TransitServer.start` and `TransitServer.stop` are internal class methods from the Transit Python runtime, not user-defined functions. The scanner should exclude methods from classes that aren't the user's entry point.
-
-### Recommendation
-
-Filter out methods from classes imported from `transit_server` or other runtime modules.
+Reserve `transit.python()` for what Python excels at:
+- ML inference (PyTorch, TensorFlow — these call into C/CUDA)
+- Data science (pandas, numpy — native extensions)
+- Scripting and orchestration (I/O-bound, not CPU-bound)
+- Libraries with no Rust/Java equivalent
 
 ---
 
 ## Summary of Recommended Priorities
 
-| # | Issue | Severity | Effort |
-|---|-------|----------|--------|
-| 1 | Java thread pool deadlock | Critical | Low (one-line change) |
-| 2 | Java runtime not in npm package | High | Medium |
-| 3 | Python transit_server.py not in npm package | High | Medium |
-| 4 | Transit wraps args in arrays | Medium | Low (document or auto-unwrap) |
-| 5 | Java classpath/mainClass manual config | Medium | Medium (auto-detect) |
-| 6 | JSON string results not auto-parsed | Medium | Low (bridge change) |
-| 7 | napi-build version in docs | Low | Trivial |
-| 8 | Scanner detects runtime class methods | Low | Low |
+| # | Optimization | Impact | Effort | Bottleneck Addressed |
+|---|---|---|---|---|
+| 1 | Enable orjson (env var) | 2–10x JSON | Trivial | Serialization |
+| 2 | `ProcessPoolExecutor` for calls | 2–8x concurrent | Small | GIL contention |
+| 3 | `asyncio` + `uvloop` rewrite | 2–4x I/O | Medium | Thread overhead |
+| 4 | C extensions in user code | 10–100x compute | Varies | CPython interpreter |
+| 5 | Use Rust/Java for compute | 10–1000x | Low (reuse) / High (new port) | Language choice |
+
+### What's Already Optimized (No Further Gains)
+
+The following are already at or near optimal in the current implementation:
+
+- **Binary protocol** — compact, fixed-size headers, no HTTP overhead
+- **Unix domain sockets** — 2–3x less latency than TCP loopback (auto-detected on Linux/macOS)
+- **Zero-copy receive** — `recv_into()` with pre-allocated `bytearray` + `memoryview`
+- **Connection pooling** — `min(cpus, 8)` persistent sockets with round-robin
+- **Buffer caching (JS side)** — function name bytes cached in `fnNameCache`
+- **`Buffer.allocUnsafe`** — avoids zero-fill on the JS side
+- **Inline field reads** — response parsing avoids method call overhead
+- **`TCP_NODELAY`** — disables Nagle's algorithm for TCP sockets
+- **Single-client fast path** — skips write lock when only one client is connected

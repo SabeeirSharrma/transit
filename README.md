@@ -1,8 +1,10 @@
 # Transit
 
+![Bundle](https://img.shields.io/bundlephobia/minzip/@sabeeirsharrma/transit)
+
 **Languages that just talk to each other. No API. No middleman.**
 
-Transit lets you write functions in Rust, Java, or Python and then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
+Transit lets you write functions in Rust, Java, Python, C, or C++ and then call them from JavaScript as if they were normal async functions. No REST APIs, no JSON schemas, no glue code. Just write your logic in the language that fits the job, and Transit handles the rest.
 
 For full docs, go to: <https://sabeeir.qd.je/transit>
 
@@ -16,11 +18,15 @@ const __dirname = import.meta.dirname
 const rs = transit.rust(resolve(__dirname, "./rust"))
 const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
 const py = transit.python(resolve(__dirname, "./python"))
+const c  = transit.c(resolve(__dirname, "./c"))
+const cpp = transit.cpp(resolve(__dirname, "./cpp"))
 
 // Call functions across language boundaries
 const rustResult = await rs.processFile({ id: "job-001", bytes: [72, 101, 108] })
 const javaResult = await jv.handleSpecialized(rustResult)
 const pythonResult = await py.analyzeData(javaResult)
+const cResult = await c.processChunk({ data: [1, 2, 3] })
+const cppResult = await cpp.fastCompute({ n: 42 })
 ```
 
 ## Transit - Benchmarks
@@ -122,6 +128,7 @@ Requirements:
 - **Rust** toolchain (for scanner + Rust addons)
 - **Java** JDK 21+ (if using Java)
 - **Python** 3.10+ (if using Python)
+- **C/C++** compiler (if using C/C++ — GCC, Clang, or MSVC)
 - **bun** (recommended) or npm
 
 ### 2. Write functions in any supported language
@@ -154,6 +161,28 @@ def process_data(args_json):
     return '{"output": "processed"}'
 ```
 
+**C** - write functions that take and return JSON strings:
+
+```c
+// c/src/addon.c
+#include <transit_c_glue.gen.h>
+
+const char* process_chunk(const char* args_json) {
+    return "{\"output\": \"processed\"}";
+}
+```
+
+**C++** - write functions that take and return JSON strings:
+
+```cpp
+// cpp/src/addon.cpp
+#include <transit_cpp_glue.gen.h>
+
+std::string fast_compute(const std::string& args_json) {
+    return "{\"output\": \"processed\"}";
+}
+```
+
 ### 3. Call from JS
 
 ```js
@@ -165,11 +194,15 @@ const __dirname = import.meta.dirname
 const rs = transit.rust(resolve(__dirname, "./rust"))
 const jv = transit.java(resolve(__dirname, "./java/src/main/java"))
 const py = transit.python(resolve(__dirname, "./python"))
+const c  = transit.c(resolve(__dirname, "./c"))
+const cpp = transit.cpp(resolve(__dirname, "./cpp"))
 
 // Call functions - they appear as normal async methods
 await rs.processJob([72, 101, 108])       // → Rust
 await jv.processJob({"data": [1, 2]})     // → Java
 await py.processData({"items": [10, 20]}) // → Python
+await c.processChunk({"data": [1, 2, 3]}) // → C
+await cpp.fastCompute({"n": 42})          // → C++
 ```
 
 ### 4. See what Transit found
@@ -182,6 +215,10 @@ transit.info()
 //   - processJob [tier 1]
 // python (./python): 1 functions
 //   - processData [tier 1]
+// c (./c): 1 functions
+//   - processChunk [tier 1]
+// cpp (./cpp): 1 functions
+//   - fastCompute [tier 1]
 ```
 
 ## How It Works
@@ -190,7 +227,7 @@ Transit has three components:
 
 1. **Scanner:** Uses tree-sitter to scan your source code and find exported functions automatically
 2. **Bridges:** Transport layers that connect JS to each language:
-   - **Rust:** In-process native addon (zero overhead)
+   - **Rust/C/C++:** In-process native addon (zero overhead)
    - **Java:** Persistent TCP process on localhost
    - **Python:** Persistent TCP process on localhost
 3. **Proxy:** A JS `Proxy` that makes cross-language calls look like normal function calls
@@ -216,12 +253,12 @@ See [Getting Started](docs/getting-started.md) for full CLI documentation.
 Your JS code
     │
     ▼
-transit.rust() / transit.java() / transit.python()
+transit.rust() / transit.java() / transit.python() / transit.c() / transit.cpp()
     │
     ▼
 Proxy resolves function name against scanner manifest
     │
-    ├──► Rust: in-process native addon (.node)
+    ├──► Rust/C/C++: in-process native addon (.node)
     ├──► Java: TCP binary protocol → JVM resident process
     └──► Python: TCP binary protocol → Python resident process
 ```
@@ -231,7 +268,7 @@ Proxy resolves function name against scanner manifest
 ```
 transit/
   packages/
-    transit-js/                 # Public API - transit.rust(), transit.java(), transit.python()
+    transit-js/                 # Public API - transit.rust(), transit.java(), transit.python(), transit.c(), transit.cpp()
     transit-scanner/            # Rust tree-sitter scanner (native addon)
     transit-schema/             # Shared types and config
     transit-rust-runtime/       # napi-rs bridge for in-process Rust calls
@@ -242,6 +279,9 @@ transit/
     transit-codegen/            # Code generation for typed stubs
   cli/
     transit-cli/                # transit init / dev / build / start
+  templates/
+    c/                          # C addon templates (binding.gyp, example source)
+    cpp/                        # C++ addon templates (binding.gyp, example source)
   examples/
     js-rust-java-demo/          # Working demo project
 ```

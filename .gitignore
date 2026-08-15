@@ -36,8 +36,11 @@ __pycache__/
 
 # Files used for planning
 plan.md
+update-plans.md
 
 # Cache
 **/.transit-cache.json
 
 /.astro/
+
+/.omo/
