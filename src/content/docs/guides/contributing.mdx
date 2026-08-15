@@ -3,219 +3,69 @@ title: Contributing
 description: Development guide for the Transit monorepo.
 ---
 
-Development guide for the Transit monorepo.
+# Contributing to Transit
 
-## Prerequisites
+Thanks for your interest in Transit. Before opening anything, please read
+this — it'll save you time.
 
-- **Node.js** >= 20
-- **bun** (package manager)
-- **Rust** toolchain (for scanner and native addons)
-- **Java** JDK 21+ (for Java runtime)
-- **Python** 3.10+ (for Python runtime)
+## The short version
 
-## Repository Structure
+- **Issues are welcome and encouraged.** Bug reports, feature requests,
+  questions, benchmark discrepancies, design feedback - all of that belongs
+  here and will be read.
+- **Unsolicited pull requests are not accepted.** Transit is maintained by
+  a single person with a specific architectural vision and a spec-first
+  workflow. PRs opened without prior discussion will be closed unreviewed,
+  regardless of code quality. This isn't personal - see below for why.
 
-```
-transit/
-  packages/
-    transit-js/                 # Public API (TypeScript → dist/index.js)
-    transit-scanner/            # Rust tree-sitter scanner (native addon)
-    transit-schema/             # Shared types and config (TypeScript)
-    transit-rust-runtime/       # napi-rs bridge (Rust)
-    transit-java-runtime/       # Java TCP server (Java)
-    transit-java-runtime-js/    # Java bridge client (TypeScript)
-    transit-py-runtime/         # Python TCP server (Python)
-    transit-python-runtime-js/  # Python bridge client (TypeScript)
-    transit-codegen/            # Code generation (TypeScript)
-  cli/
-    transit-cli/                # CLI tool — init, dev, build, start
-  examples/
-    js-rust-java-demo/          # Working demo
-  docs/                         # Documentation
-```
+## Why no unsolicited PRs
 
-## Building
+Transit's design (transport model, export tiers, config resolution order,
+etc.) is deliberate and documented in the project's spec docs before any
+code gets written. A PR that "just adds a feature" or "just fixes a bug"
+often makes an implicit design decision along with it - and reviewing,
+understanding, and potentially reverting someone else's design decisions
+takes significantly more time than writing the equivalent code from
+scratch with full context. For a solo-maintained project, that overhead
+isn't sustainable.
 
-### Install all dependencies
+This may change as the project matures and if a stable contribution model
+makes sense later. For now, the fastest way to get something into Transit
+is to open an issue and get alignment first.
 
-```bash
-bun install
-```
+## How to actually contribute right now
 
-### Build the scanner (Rust native addon)
+1. **Found a bug?** Open an issue with:
+   - What you expected to happen
+   - What actually happened
+   - Steps to reproduce (a minimal repro is extremely helpful)
+   - Transit version, OS, and relevant language versions (Rust/Java/Python
+     versions if relevant to the bug)
 
-```bash
-cd packages/transit-scanner
-cargo build --release
-cp target/release/libtransit_scanner.so index.node
-```
+2. **Have a feature idea or design suggestion?** Open an issue describing
+   the problem you're trying to solve, not just the solution you have in
+   mind — the "why" is more useful than the "what" at this stage. If a
+   design discussion happens in the issue and there's alignment that a PR
+   would help, one may be explicitly requested at that point.
 
-### Build transit-js
+3. **Found a security issue?** Do not open a public issue. See
+   [SECURITY.md](./SECURITY.md) if present, or contact the maintainer
+   directly.
 
-```bash
-cd packages/transit-js
-bun run build
-```
+4. **Benchmark results looking off?** Open an issue with your benchmark
+   output attached - benchmark correctness matters a lot here, and
+   discrepancies are taken seriously.
 
-### Build the CLI
+## If you already wrote a PR
 
-```bash
-cd cli/transit-cli
-bun run build
-```
+If you've already put in the work and opened a PR anyway - thank you for
+the effort, genuinely, but it will likely be closed unreviewed per the
+policy above. If you think it's worth discussing, open an issue describing
+what the PR does and why, and link the PR from there. That's the version
+of this that has a chance of actually landing.
 
-### Build Java classes
+## Code of Conduct
 
-```bash
-cd packages/transit-java-runtime
-javac -d build src/main/java/transit/java/*.java
-```
-
-### Build the Rust demo addon
-
-```bash
-cd examples/js-rust-java-demo/rust
-cargo build --release
-cp target/release/libtransit_demo.so index.node
-```
-
-## Testing
-
-### Quick smoke test
-
-```bash
-timeout 15 node --input-type=module -e "
-import { transit } from './packages/transit-js/dist/index.js';
-import { resolve } from 'node:path';
-
-const rs = transit.rust(resolve('examples/js-rust-java-demo/rust'));
-const jv = transit.java(resolve('packages/transit-java-runtime/src/main/java'));
-
-const rustResult = await rs.processGeneral({ id: 'test', bytes: [1,2,3], priority: 1 });
-console.log('Rust:', rustResult);
-
-const javaResult = await jv.processSpecialized({ id: 'test', bytes: [1,2,3] });
-console.log('Java:', javaResult);
-
-await jv._bridge.stop();
-process.exit(0);
-"
-```
-
-### Python smoke test
-
-```bash
-timeout 15 node --input-type=module -e "
-import { transit } from './packages/transit-js/dist/index.js';
-import { resolve } from 'node:path';
-
-const py = transit.python(resolve('packages/transit-py-runtime'));
-
-const result = await py.processData({ items: [1, 2, 3] });
-console.log('Python:', result);
-
-await py._bridge.stop();
-process.exit(0);
-"
-```
-
-### Scanner test
-
-```bash
-node -e "
-const { scanDirectory } = require('./packages/transit-scanner/index.js');
-const result = scanDirectory('packages/transit-java-runtime/src/main/java');
-console.log(JSON.parse(result).entries.length, 'functions found');
-"
-```
-
-### CLI test
-
-```bash
-# Test init
-node cli/transit-cli/dist/index.js init --dry-run
-
-# Test build (codegen only)
-node cli/transit-cli/dist/index.js build --codegen-only
-
-# Test help
-node cli/transit-cli/dist/index.js --help
-```
-
-## Architecture Notes
-
-### Scanner (transit-scanner)
-
-Written in Rust for performance. Uses tree-sitter for structural parsing and a text-based fallback for Rust (`pub fn`) and Java (`public` methods).
-
-Key files:
-- `src/lib.rs` — scanner implementation
-- `index.js` — CJS loader for the native addon
-- `index.node` — compiled addon (not committed, built locally)
-
-### Transit-js
-
-The public API is a TypeScript file (`src/index.ts`) that compiles to ESM. Uses top-level `await` to load the scanner module at init.
-
-Key pattern: `createLanguageHandle()` builds a JavaScript `Proxy` that intercepts property access, resolves function names against the manifest, and dispatches to the appropriate bridge.
-
-### Java Runtime
-
-Two packages:
-- `transit-java-runtime/` — the Java server code (`.java` files + compiled `.class` files)
-- `transit-java-runtime-js/` — the Node.js client (`JavaProcessManager`)
-
-The Java server uses TCP (not Unix sockets) because `UnixDomainSocketAddress` is not supported on all platforms. The server binds to `127.0.0.1` on an ephemeral port.
-
-### Python Runtime
-
-Two packages:
-- `transit-py-runtime/` — the Python server code (`transit_server.py`)
-- `transit-python-runtime-js/` — the Node.js client (`PythonProcessManager`)
-
-Same binary protocol as Java. Uses only Python stdlib (no external dependencies).
-
-### Codegen (transit-codegen)
-
-Generates typed stubs from scanner manifests:
-- `generateTypeScript()` — produces `transit.gen.ts`
-- `generateJavaGlue()` — produces `TransitService.gen.java`
-- `generatePythonGlue()` — produces `transit_service.gen.py`
-
-### CLI (transit-cli)
-
-Commands:
-- `transit init` — detects languages, writes config
-- `transit dev` — live development with file watching
-- `transit build` — scan → codegen → compile pipeline
-- `transit start` — production mode with resident processes
-
-## Known Issues / TODOs
-
-- **Schema file:** The `transit.config.schema.json` format is not yet defined
-- **Python auto-import:** `transit init` doesn't auto-insert import statements
-- **`transit start` entry point:** Currently uses `--import ./transit.gen.js` which requires ESM support in the entry point
-
-## Code Style
-
-- TypeScript: 2-space indent, double quotes, semicolons
-- Rust: standard `rustfmt`
-- Java: standard Oracle style
-- Python: PEP 8
-- Commit messages: imperative mood, concise (e.g., "fix scanner toggle bug", "add Java TCP bridge")
-
-## Pull Requests
-
-To start contributing, first, create an issue and then, within that issue click on 'Create new branch'.
-Once finished and ready to merge, create a new pull request related to the issue, PRs should be in this format:
-
-**Title:** issue tag and title
-**Description:** Changes made + how they work
-
-Once PRs are published, it may take 1-2 days for review and approval, once approved, branch will be merged and PR + issue closed
-
-You cannot re-open PRs, if something related to the original issue or the same problem/bug arises, you can either re-open the original issue OR create a new issue.
-
-Some issues may be overtaken/undertaken by repo maintainer(s) at any time, with notice (so please keep checking issue conversations)
-
-Issue branches will be deleted (unless they are extremely major changes)
+Participation in this project (issues, discussions, anywhere else the
+project has a presence) is governed by the
+[Code of Conduct](https://github.com/SabeeirSharrma/transit/blob/main/CODE_OF_CONDUCT.md).
