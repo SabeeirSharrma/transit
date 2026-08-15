@@ -107,6 +107,60 @@ const py = transit.python("./python")
 const py = transit.python("./python", { serverScript: "filters.py" })
 ```
 
+### `transit.c(directory): FunctionProxy`
+
+Scans a C source directory and returns a language handle.
+
+```js
+const c = transit.c("./c")
+```
+
+**Parameters:**
+- `dir` (string) — path to the directory containing C source files
+
+**Returns:** A `FunctionProxy` — same interface as Rust/Java.
+
+**Behavior:**
+- Scans for C source files
+- Detects exported functions matching generated `transit_c_glue.gen.h` signatures
+- On first function call, loads the compiled native addon (`.node` or `.so`) from the directory
+- Caches the handle — calling `transit.c(dir)` again with the same path returns the same handle
+
+**Transport:** In-process native addon. Zero serialization overhead.
+
+**Example:**
+```js
+const c = transit.c("./c")
+console.log(await c.processChunk({ data: [1, 2, 3] }))
+```
+
+### `transit.cpp(directory): FunctionProxy`
+
+Scans a C++ source directory and returns a language handle.
+
+```js
+const cpp = transit.cpp("./cpp")
+```
+
+**Parameters:**
+- `dir` (string) — path to the directory containing C++ source files
+
+**Returns:** A `FunctionProxy` — same interface as Rust/Java.
+
+**Behavior:**
+- Scans for C++ source files
+- Detects exported functions matching generated `transit_cpp_glue.gen.h` signatures
+- On first function call, loads the compiled native addon (`.node` or `.so`) from the directory
+- Caches the handle — calling `transit.cpp(dir)` again with the same path returns the same handle
+
+**Transport:** In-process native addon. Zero serialization overhead.
+
+**Example:**
+```js
+const cpp = transit.cpp("./cpp")
+console.log(await cpp.fastCompute({ n: 42 }))
+```
+
 ### `transit.info(): void`
 
 Prints all discovered functions for every registered language handle.
