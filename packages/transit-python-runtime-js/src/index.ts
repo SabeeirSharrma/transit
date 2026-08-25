@@ -167,7 +167,12 @@ export class PythonProcessManager {
     // If explicitly set, use that
     if (this.options.serverScript) {
       const script = resolve(this.options.pythonDir, this.options.serverScript);
-      return existsSync(script) ? script : null;
+      if (existsSync(script)) return script;
+      // Don't silently fall through — throw immediately so the user sees their custom script is missing
+      throw new Error(
+        `Custom server script not found: ${script}\n` +
+        `Check the serverScript option or ensure the file exists in ${this.options.pythonDir}`
+      );
     }
 
     // Auto-detect: look for service files that have function registrations
@@ -224,17 +229,39 @@ export class PythonProcessManager {
         // Forward Python stderr for debugging
         process.stderr.write(`[transit-python] ${chunk}`);
       });
+
+      // Reject immediately if the process exits before printing transport info
+      proc.on("error", (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`Python process error: ${err.message}`));
+      });
+      proc.on("exit", (code, signal) => {
+        clearTimeout(timeout);
+        reject(
+          new Error(
+            `Python process exited (code=${code}, signal=${signal}) before printing PORT= or SOCKET=`
+          )
+        );
+      });
     });
   }
 
   /**
    * Connect a pool of sockets to the Python server via UDS or TCP.
+   * On partial failure, closes any sockets already connected.
    */
   private async connectPool(size: number): Promise<void> {
     this.sockets = [];
     for (let i = 0; i < size; i++) {
-      const socket = await this.createConnection();
-      this.sockets.push(socket);
+      try {
+        const socket = await this.createConnection();
+        this.sockets.push(socket);
+      } catch (err) {
+        // Clean up any sockets we already opened before failing
+        for (const s of this.sockets) s.destroy();
+        this.sockets = [];
+        throw err;
+      }
     }
   }
 
@@ -281,6 +308,12 @@ export class PythonProcessManager {
     // Clean up old state
     for (const s of this.sockets) s.destroy();
     this.sockets = [];
+    // Reject pending calls from the crashed process
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Python process crashed"));
+    }
+    this.pending.clear();
     this.process?.kill();
     this.process = null;
     // Restart after a delay

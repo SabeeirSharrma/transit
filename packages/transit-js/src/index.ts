@@ -112,13 +112,18 @@ function scanFileSync(filePath: string): ManifestEntry[] {
     return [];
   }
   try {
+    // scanFilePath returns a JSON array (not wrapped in { entries: [...] })
     const json = scannerModule.scanFilePath(resolve(filePath));
     const raw = JSON.parse(json);
+    if (!Array.isArray(raw)) {
+      console.error(`[transit] Unexpected scanFilePath response for ${filePath}`);
+      return [];
+    }
     return raw.map((e: any) => ({
       language: e.language,
       sourceFile: e.source_file ?? e.sourceFile,
       functionName: e.function_name ?? e.functionName,
-      signature: e.signature,
+      signature: e.signature ?? "",
       export_tier: e.export_tier ?? e.exportTier,
       exportTier: e.export_tier ?? e.exportTier,
     }));
@@ -594,7 +599,9 @@ class Transit {
     };
 
     process.on("exit", () => {
-      // Synchronous cleanup attempt — best effort
+      for (const bridge of this.bridges) {
+        bridge.stop?.().catch(() => {});
+      }
     });
     process.on("SIGINT", async () => {
       await shutdown();

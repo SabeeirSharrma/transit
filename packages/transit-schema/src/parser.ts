@@ -48,30 +48,37 @@ function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   const lines = source.split("\n");
   let lineNum = 0;
+  let indentLevel = 0;
 
   for (const line of lines) {
     lineNum++;
-    // Skip empty lines and pure comment lines
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("#")) {
       tokens.push({ type: "NEWLINE", value: "", line: lineNum, col: 1 });
       continue;
     }
 
-    // Track indentation (2-space based)
     const indent = line.length - line.trimStart().length;
     if (indent > 0 && tokens.length > 0) {
       const last = tokens[tokens.length - 1];
       if (last.type === "NEWLINE") {
-        tokens.push({ type: "INDENT", value: String(indent), line: lineNum, col: 1 });
+        if (indent > indentLevel) {
+          tokens.push({ type: "INDENT", value: String(indent), line: lineNum, col: 1 });
+          indentLevel = indent;
+        } else if (indent < indentLevel) {
+          while (indentLevel > indent) {
+            indentLevel -= 2;
+            if (indentLevel < 0) indentLevel = 0;
+            tokens.push({ type: "DEDENT", value: String(indentLevel), line: lineNum, col: 1 });
+          }
+          indentLevel = indent;
+        }
       }
     }
 
-    // Tokenize the rest of the line
     let col = indent + 1;
     const rest = trimmed;
 
-    // Strip inline comments
     const commentIdx = rest.indexOf("#");
     const content = commentIdx >= 0 ? rest.slice(0, commentIdx).trim() : rest;
 
@@ -135,11 +142,12 @@ function tokenize(source: string): Token[] {
       }
 
       // Quoted string
-      if (ch === '"') {
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
         let str = "";
         i++;
         col++;
-        while (i < content.length && content[i] !== '"') {
+        while (i < content.length && content[i] !== quote) {
           str += content[i];
           i++;
           col++;
@@ -191,7 +199,7 @@ class Parser {
   }
 
   private advance(): Token {
-    const tok = this.tokens[this.pos];
+    const tok = this.tokens[this.pos] ?? { type: "EOF", value: "", line: 0, col: 0 };
     this.pos++;
     return tok;
   }
@@ -314,7 +322,7 @@ class Parser {
   }
 
   private parseFunction(): SchemaFunction {
-    this.expect("IDENT"); // "func"
+    this.expect("IDENT"); // "func" keyword
     const name = this.expect("IDENT").value;
 
     // Params

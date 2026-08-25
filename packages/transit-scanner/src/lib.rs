@@ -310,6 +310,10 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
         let source_str = std::str::from_utf8(source).unwrap_or("");
         for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
+            // Skip comment lines and attribute lines — look past them to find actual fn declarations
+            if trimmed.starts_with("//") || trimmed.starts_with('#') {
+                continue;
+            }
             if trimmed.contains("pub fn ") || trimmed.contains("pub async fn ") {
                 // Extract function name
                 if let Some(fn_start) = trimmed.find("fn ") {
@@ -390,8 +394,10 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
         let source_str = std::str::from_utf8(source).unwrap_or("");
         for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
-            // Skip comments and preprocessor directives
-            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#") {
+            // Skip comments, preprocessor directives, and typedefs
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#")
+                || trimmed.starts_with("typedef")
+            {
                 continue;
             }
             // Match function definitions: type name(params) { or type name(params);
@@ -417,7 +423,7 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                             // Skip common non-function patterns
                             if *fn_name != "if" && *fn_name != "while" && *fn_name != "for"
                                 && *fn_name != "switch" && *fn_name != "return"
-                                && !fn_name.starts_with('"') && !fn_name.starts_with('*')
+                                && !fn_name.starts_with('"')
                             {
                                 let signature = trimmed.trim_end_matches('{').trim().trim_end_matches(';').trim().to_string();
                                 
@@ -445,8 +451,10 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
         let source_str = std::str::from_utf8(source).unwrap_or("");
         for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
-            // Skip comments and preprocessor directives
-            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#") {
+            // Skip comments, preprocessor directives, and typedefs
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#")
+                || trimmed.starts_with("typedef")
+            {
                 continue;
             }
             // Skip static functions
@@ -467,7 +475,7 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                         if let Some(fn_name) = words.last() {
                             if *fn_name != "if" && *fn_name != "while" && *fn_name != "for"
                                 && *fn_name != "switch" && *fn_name != "return" && *fn_name != "catch"
-                                && !fn_name.starts_with('"') && !fn_name.starts_with('*')
+                                && !fn_name.starts_with('"')
                                 && !fn_name.starts_with('~') // destructors
                             {
                                 let signature = trimmed.trim_end_matches('{').trim().trim_end_matches(';').trim().to_string();
