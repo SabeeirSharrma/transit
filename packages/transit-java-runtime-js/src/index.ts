@@ -175,6 +175,19 @@ export class JavaProcessManager {
         // Forward Java stderr for debugging
         process.stderr.write(`[transit-java] ${chunk}`);
       });
+
+      proc.on("error", (err) => {
+        clearTimeout(timeout);
+        reject(new Error(`Java process error: ${err.message}`));
+      });
+      proc.on("exit", (code, signal) => {
+        clearTimeout(timeout);
+        reject(
+          new Error(
+            `Java process exited (code=${code}, signal=${signal}) before printing PORT=`
+          )
+        );
+      });
     });
   }
 
@@ -184,8 +197,16 @@ export class JavaProcessManager {
   private async connectPool(size: number): Promise<void> {
     this.sockets = [];
     for (let i = 0; i < size; i++) {
-      const socket = await this.createConnection();
-      this.sockets.push(socket);
+      try {
+        const socket = await this.createConnection();
+        this.sockets.push(socket);
+      } catch (err) {
+        for (const s of this.sockets) s.destroy();
+        this.sockets = [];
+        this.process?.kill();
+        this.process = null;
+        throw err;
+      }
     }
   }
 
@@ -205,6 +226,7 @@ export class JavaProcessManager {
 
       socket.on("error", reject);
       socket.setTimeout(this.options.connectTimeout, () => {
+        socket.destroy();
         reject(new Error("Connection timeout"));
       });
     });
@@ -214,6 +236,12 @@ export class JavaProcessManager {
    * Restart the Java process if it crashed.
    */
   private maybeRestart(): void {
+    // Reject pending calls FIRST so callers don't hang forever
+    for (const [id, pending] of this.pending) {
+      pending.reject(new Error("Java process died"));
+    }
+    this.pending.clear();
+
     if (this.restartCount >= this.options.maxRestarts) {
       console.error("[transit-java] Max restarts reached, giving up");
       return;
@@ -225,6 +253,11 @@ export class JavaProcessManager {
     // Clean up old state
     for (const s of this.sockets) s.destroy();
     this.sockets = [];
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Java process crashed"));
+    }
+    this.pending.clear();
     this.process?.kill();
     this.process = null;
     // Restart after a delay
@@ -297,7 +330,19 @@ export class JavaProcessManager {
     const result = response.subarray(15, 15 + resultLen).toString("utf-8");
 
     if (status === STATUS_ERROR) {
-      throw new Error(JSON.parse(result).error || "Java function returned error");
+      try {
+        const parsed = JSON.parse(result);
+        const msg =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof parsed.error === "string"
+            ? parsed.error
+            : undefined;
+        throw new Error(msg || "Java function returned error");
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          throw new Error(`Java function returned invalid error response: ${result.slice(0, 200)}`);
+        }
+        throw e;
+      }
     }
 
     return result;
