@@ -23,7 +23,7 @@ const TRANSIT_RESOLVE_RE = /transit\.(rust|java|python|c|cpp)\s*\(\s*resolve\s*\
 /** Source file extensions to scan */
 const SCANNABLE_EXTENSIONS = new Set([
   ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
-  ".mjs", ".mts",
+  ".mts",
 ]);
 
 /** Directories to skip when scanning */

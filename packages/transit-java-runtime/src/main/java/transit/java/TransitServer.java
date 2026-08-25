@@ -165,6 +165,8 @@ public class TransitServer {
     }
 
     private void handleCall(byte[] payload, int requestId, DataOutputStream out, ReentrantLock writeLock) {
+        byte status;
+        String resultJson;
         try {
             ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
 
@@ -182,8 +184,6 @@ public class TransitServer {
 
             // Look up and call the function (no lock held — parallel execution)
             TransitFunction fn = functions.get(fnName);
-            String resultJson;
-            byte status;
 
             if (fn == null) {
                 status = STATUS_ERROR;
@@ -198,20 +198,25 @@ public class TransitServer {
                     resultJson = "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}";
                 }
             }
+        } catch (Exception e) {
+            System.err.println("[transit-java] Call handler error: " + e.getMessage());
+            status = STATUS_ERROR;
+            resultJson = "{\"error\":\"Internal error processing call\"}";
+        }
 
-            // Build response — single allocation
+        // Build and send response — always send a response so the client never hangs
+        try {
             byte[] resultBytes = resultJson.getBytes(StandardCharsets.UTF_8);
             ByteBuffer resp = ByteBuffer.allocate(HEADER_SIZE + 1 + 4 + resultBytes.length)
                                         .order(ByteOrder.LITTLE_ENDIAN);
             resp.put(PROTOCOL_VERSION);
             resp.put(TYPE_CALL_RESPONSE);
             resp.putInt(requestId);
-            resp.putInt(1 + 4 + resultBytes.length); // payload: status(1) + result_len(4) + result(N)
+            resp.putInt(1 + 4 + resultBytes.length);
             resp.put(status);
             resp.putInt(resultBytes.length);
             resp.put(resultBytes);
 
-            // Acquire lock only for the write to prevent interleaved responses
             writeLock.lock();
             try {
                 out.write(resp.array());
@@ -220,7 +225,7 @@ public class TransitServer {
                 writeLock.unlock();
             }
         } catch (Exception e) {
-            System.err.println("[transit-java] Call handler error: " + e.getMessage());
+            System.err.println("[transit-java] Failed to send response for requestId=" + requestId + ": " + e.getMessage());
         }
     }
 
