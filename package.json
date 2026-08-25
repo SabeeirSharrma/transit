@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "prebuild": "node scripts/copy-readme.js",
-    "build": "npm run build -w @sabeeirsharrma/schema && npm run build --workspaces --if-present",
+    "build": "npm run build -w @sabeeirsharrma/schema && npm run build -w @sabeeirsharrma/java-runtime && npm run build -w @sabeeirsharrma/python-runtime && npm run build --workspaces --if-present",
     "dev": "transit dev",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
