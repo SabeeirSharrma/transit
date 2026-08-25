@@ -1,6 +1,6 @@
 {
   "name": "@sabeeirsharrma/py-runtime",
-  "version": "2.6.0",
+  "version": "3.0.0",
   "description": "Python resident-process server for Transit polyglot interop",
   "main": "transit_server.py",
   "files": [

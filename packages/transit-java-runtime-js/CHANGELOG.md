@@ -1,5 +1,17 @@
 # @sabeeirsharrma/java-runtime
 
+## 3.0.0
+
+### Major Changes
+
+- Add C/C++ support, make python faster
+
+### Patch Changes
+
+- Updated dependencies
+  - @sabeeirsharrma/java-runtime-sources@3.0.0
+  - @sabeeirsharrma/schema@3.0.0
+
 ## 2.6.0
 
 ### Minor Changes

@@ -3,6 +3,8 @@
 /** Clear the entire cache for a directory. */
 export declare function clearCache(root: string): void
 
+export declare function detectHolycc(): string | null
+
 /** Invalidate the cache for a specific file (e.g. on file delete). */
 export declare function invalidateCache(root: string, filePath: string): void
 
@@ -17,6 +19,8 @@ export declare function scanDirectory(root: string): string
  * Used by the file watcher for incremental updates.
  */
 export declare function scanFilePath(filePath: string): string
+
+export declare function transpileHolycc(hccPath: string, sourcePath: string): string
 
 /** Get the Transit scanner version. */
 export declare function version(): string

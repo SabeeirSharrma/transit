@@ -1,5 +1,11 @@
 # @sabeeirsharrma/py-runtime
 
+## 3.0.0
+
+### Major Changes
+
+- Add C/C++ support, make python faster
+
 ## 2.6.0
 
 ### Minor Changes
