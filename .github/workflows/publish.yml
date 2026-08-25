@@ -1,0 +1,51 @@
+# Publish to npmjs
+#
+# Manual publishing pipeline for the Transit monorepo.
+#
+# Prerequisites:
+#   1. Create an npm automation token at https://www.npmjs.com/settings/tokens
+#      - Token type: "Automation" (bypasses 2FA for CI)
+#      - Scope: "Read and Write"
+#   2. Add the token as a GitHub repository secret named NPM_TOKEN:
+#      - Go to repo Settings → Secrets and variables → Actions
+#      - Click "New repository secret"
+#      - Name: NPM_TOKEN
+#      - Value: your npm automation token
+#
+# Usage:
+#   1. Create changeset:     npm run changeset
+#   2. Bump versions:        npm run version-packages
+#   3. Commit & push:        git add . && git commit -m "chore: version packages" && git push
+#   4. Publish:              Go to Actions → "Publish to npm" → Run workflow
+
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # for pushing version bumps back
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        run: npx changeset publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
