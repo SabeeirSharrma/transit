@@ -79,7 +79,22 @@ function tokenize(source: string): Token[] {
     let col = indent + 1;
     const rest = trimmed;
 
-    const commentIdx = rest.indexOf("#");
+    // Strip comments, but skip # inside quoted strings
+    let commentIdx = -1;
+    let inStr = false;
+    let strChar = "";
+    for (let ci = 0; ci < rest.length; ci++) {
+      const c = rest[ci];
+      if (inStr) {
+        if (c === strChar) inStr = false;
+      } else if (c === '"' || c === "'") {
+        inStr = true;
+        strChar = c;
+      } else if (c === "#") {
+        commentIdx = ci;
+        break;
+      }
+    }
     const content = commentIdx >= 0 ? rest.slice(0, commentIdx).trim() : rest;
 
     let i = 0;
@@ -178,6 +193,12 @@ function tokenize(source: string): Token[] {
     }
 
     tokens.push({ type: "NEWLINE", value: "", line: lineNum, col });
+  }
+
+  while (indentLevel > 0) {
+    indentLevel -= 2;
+    if (indentLevel < 0) indentLevel = 0;
+    tokens.push({ type: "DEDENT", value: String(indentLevel), line: lineNum, col: 1 });
   }
 
   tokens.push({ type: "EOF", value: "", line: lineNum, col: 0 });

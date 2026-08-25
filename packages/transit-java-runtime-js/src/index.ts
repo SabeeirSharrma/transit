@@ -203,6 +203,8 @@ export class JavaProcessManager {
       } catch (err) {
         for (const s of this.sockets) s.destroy();
         this.sockets = [];
+        this.process?.kill();
+        this.process = null;
         throw err;
       }
     }
@@ -224,6 +226,7 @@ export class JavaProcessManager {
 
       socket.on("error", reject);
       socket.setTimeout(this.options.connectTimeout, () => {
+        socket.destroy();
         reject(new Error("Connection timeout"));
       });
     });
@@ -233,6 +236,12 @@ export class JavaProcessManager {
    * Restart the Java process if it crashed.
    */
   private maybeRestart(): void {
+    // Reject pending calls FIRST so callers don't hang forever
+    for (const [id, pending] of this.pending) {
+      pending.reject(new Error("Java process died"));
+    }
+    this.pending.clear();
+
     if (this.restartCount >= this.options.maxRestarts) {
       console.error("[transit-java] Max restarts reached, giving up");
       return;
@@ -323,7 +332,11 @@ export class JavaProcessManager {
     if (status === STATUS_ERROR) {
       try {
         const parsed = JSON.parse(result);
-        throw new Error(parsed.error || "Java function returned error");
+        const msg =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof parsed.error === "string"
+            ? parsed.error
+            : undefined;
+        throw new Error(msg || "Java function returned error");
       } catch (e) {
         if (e instanceof SyntaxError) {
           throw new Error(`Java function returned invalid error response: ${result.slice(0, 200)}`);

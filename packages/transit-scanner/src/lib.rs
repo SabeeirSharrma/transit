@@ -308,10 +308,22 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
     // For Rust, detect pub functions via source text
     if lang_name == "rust" {
         let source_str = std::str::from_utf8(source).unwrap_or("");
+        let mut in_block_comment = false;
         for (line_idx, line) in source_str.lines().enumerate() {
             let trimmed = line.trim();
-            // Skip comment lines and attribute lines — look past them to find actual fn declarations
+            if in_block_comment {
+                if trimmed.contains("*/") {
+                    in_block_comment = false;
+                }
+                continue;
+            }
             if trimmed.starts_with("//") || trimmed.starts_with('#') {
+                continue;
+            }
+            if trimmed.starts_with("/*") {
+                if !trimmed.contains("*/") {
+                    in_block_comment = true;
+                }
                 continue;
             }
             if trimmed.contains("pub fn ") || trimmed.contains("pub async fn ") {
@@ -325,13 +337,13 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                         let has_marker = check_transit_marker_before_line(source, line_idx);
                         let export_tier = resolve_export_tier(has_marker, file_has_transit_file_marker);
                         
-                        entries.push(ManifestEntry {
-                            language: lang_name.to_string(),
-                            source_file: path.to_string_lossy().to_string(),
-                            function_name: fn_name.to_string(),
-                            signature,
-                            export_tier,
-                        });
+                                entries.push(ManifestEntry {
+                                    language: lang_name.to_string(),
+                                    source_file: path.to_string_lossy().to_string(),
+                                    function_name: fn_name.to_string(),
+                                    signature,
+                                    export_tier,
+                                });
                     }
                 }
             }
@@ -420,11 +432,12 @@ fn scan_file(path: &Path, source: &[u8]) -> Vec<ManifestEntry> {
                         // Extract function name: last identifier before '('
                         let words: Vec<&str> = before_paren.split_whitespace().collect();
                         if let Some(fn_name) = words.last() {
-                            // Skip common non-function patterns
                             if *fn_name != "if" && *fn_name != "while" && *fn_name != "for"
                                 && *fn_name != "switch" && *fn_name != "return"
                                 && !fn_name.starts_with('"')
                             {
+                                let clean_name = fn_name.trim_start_matches('*').trim_start_matches('~');
+                                if clean_name.is_empty() { continue; }
                                 let signature = trimmed.trim_end_matches('{').trim().trim_end_matches(';').trim().to_string();
                                 
                                 let has_marker = check_transit_marker_before_line(source, line_idx);

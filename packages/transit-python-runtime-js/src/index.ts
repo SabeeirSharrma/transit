@@ -257,9 +257,10 @@ export class PythonProcessManager {
         const socket = await this.createConnection();
         this.sockets.push(socket);
       } catch (err) {
-        // Clean up any sockets we already opened before failing
         for (const s of this.sockets) s.destroy();
         this.sockets = [];
+        this.process?.kill();
+        this.process = null;
         throw err;
       }
     }
@@ -288,6 +289,7 @@ export class PythonProcessManager {
 
       socket.on("error", reject);
       socket.setTimeout(this.options.connectTimeout, () => {
+        socket.destroy();
         reject(new Error("Connection timeout"));
       });
     });
@@ -297,6 +299,12 @@ export class PythonProcessManager {
    * Restart the Python process if it crashed.
    */
   private maybeRestart(): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Python process died"));
+    }
+    this.pending.clear();
+
     if (this.restartCount >= this.options.maxRestarts) {
       console.error("[transit-python] Max restarts reached, giving up");
       return;
@@ -305,15 +313,8 @@ export class PythonProcessManager {
     console.error(`[transit-python] Restarting (attempt ${this.restartCount})...`);
     this.ready = false;
     this.readyPromise = null;
-    // Clean up old state
     for (const s of this.sockets) s.destroy();
     this.sockets = [];
-    // Reject pending calls from the crashed process
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error("Python process crashed"));
-    }
-    this.pending.clear();
     this.process?.kill();
     this.process = null;
     // Restart after a delay

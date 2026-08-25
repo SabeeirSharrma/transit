@@ -598,11 +598,6 @@ class Transit {
       }
     };
 
-    process.on("exit", () => {
-      for (const bridge of this.bridges) {
-        bridge.stop?.().catch(() => {});
-      }
-    });
     process.on("SIGINT", async () => {
       await shutdown();
       process.exit(0);
